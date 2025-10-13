@@ -1,11 +1,35 @@
-from flask import Flask
+from flask import Flask, jsonify
+import redis
+import os
+
 
 app = Flask(__name__)
+
+# Redis connection
+redis_client = redis.Redis(
+    host=os.getenv("REDIS_HOST", "localhost"),
+    port=int(os.getenv("REDIS_PORT", 6379)),
+    password=os.getenv("REDIS_PASSWORD", "yourpassword"),
+    decode_responses=True,
+)
 
 
 @app.route("/")
 def hello():
     return "Hello World from Flask"
+
+
+@app.route("/test-redis")
+def test_redis():
+    try:
+        # Set a test value
+        _ = redis_client.set("test_key", "Hello from Redis!")
+        # Get it back
+        value = redis_client.get("test_key")
+
+        return jsonify({"success": True, "value": value}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 if __name__ == "__main__":

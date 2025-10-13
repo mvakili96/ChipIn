@@ -9,8 +9,8 @@ services:
       - "8001:8001" # Redis Stack UI (optional)
     volumes:
       - redis-data:/data
-    environment:
-      - REDIS_ARGS="--requirepass mypassword"
+    environment: # TODO: move to .env file
+      - REDIS_ARGS=--requirepass mypassword
     networks:
       - chipin-network
 
@@ -23,10 +23,10 @@ services:
       - "80:80"
     volumes:
       - ./app:/app
-    environment:
+    environment: # TODO: move to .env file
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD="mypassword"
+      - REDIS_PASSWORD=mypassword
     depends_on:
       - redis
     networks:
