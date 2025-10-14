@@ -1,9 +1,19 @@
 from flask import Flask, jsonify
 import redis
 import os
+import sys
+
+
+# Add current directory to path for imports
+sys.path.insert(0, os.path.dirname(__file__))
+
+from routes.users import users_bp
 
 
 app = Flask(__name__)
+
+# Register blueprints
+app.register_blueprint(users_bp)
 
 # Redis connection
 redis_client = redis.Redis(
@@ -15,8 +25,17 @@ redis_client = redis.Redis(
 
 
 @app.route("/")
-def hello():
-    return "Hello World from Flask"
+def home():
+    return jsonify(
+        {
+            "message": "ChipIn API",
+            "version": "0.0.1",
+            "status": "running",
+            "endpoints": {
+                "users": "/users",
+            },
+        }
+    )
 
 
 @app.route("/test-redis")
