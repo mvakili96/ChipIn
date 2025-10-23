@@ -12,6 +12,18 @@ curl -X POST http://localhost/users/ \
 ```
 it returns a Dictionary containing the user's information.
 
+To get all users:
+```bash
+curl -s http://localhost/users/
+```
+it returns a list of Dictionaries containing the users' information.
+
+To get a user:
+```bash
+curl -s http://localhost/users/<user_id>
+```
+it returns a Dictionary containing the user's information.
+
 ## To run tests
 If you just changed the code and want to run tests, you should first rebuild the container:
 ```bash
