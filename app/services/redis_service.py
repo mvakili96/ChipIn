@@ -3,6 +3,7 @@ import redis
 from redis.commands.json.path import Path
 from redis.commands.search.field import TextField
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
+from typing import Any
 
 
 class RedisService:
@@ -43,6 +44,15 @@ class RedisService:
         key = f"user:{user_dict['id']}"
         _ = self.client.json().set(key, Path.root_path(), user_dict)
         return user_dict
+
+    def get_user(self, user_id: str) -> dict[str, Any] | None:
+        key = f"user:{user_id}"
+        return self.client.json().get(key)
+
+    def get_all_users(self) -> list:
+        res = self.client.ft("idx:users").search("*")
+        users = [r.__dict__ for r in res.docs]
+        return users
 
 
 # Singleton instance
