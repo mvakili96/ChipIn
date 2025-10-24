@@ -8,9 +8,9 @@ services:
       - "6379:6379" # Redis client
       - "8001:8001" # Redis Stack UI (optional)
     volumes:
-      - redis-data:/data
+      - ./redis-data:/data
     environment: # TODO: move to .env file
-      - REDIS_ARGS=--requirepass mypassword
+      - REDIS_ARGS=--requirepass mypassword --appendonly yes --dir /data
     networks:
       - chipin-network
 
@@ -31,9 +31,6 @@ services:
       - redis
     networks:
       - chipin-network
-
-volumes:
-  redis-data:
 
 networks:
   chipin-network:

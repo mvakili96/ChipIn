@@ -19,3 +19,19 @@ def create_user():
     saved_user = redis_service.save_user(user.to_dict())
 
     return jsonify(saved_user), 201
+
+
+@users_bp.route("/", methods=["GET"])
+def get_users():
+    users = redis_service.get_all_users()
+    return jsonify(users), 200
+
+
+@users_bp.route("/<user_id>", methods=["GET"])
+def get_user(user_id):
+    user = redis_service.get_user(user_id)
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    return jsonify(user), 200
