@@ -8,12 +8,14 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from routes.users import users_bp
+from routes.groups import groups_bp
 
 
 app = Flask(__name__)
 
 # Register blueprints
 app.register_blueprint(users_bp)
+app.register_blueprint(groups_bp)
 
 # Redis connection
 redis_client = redis.Redis(
