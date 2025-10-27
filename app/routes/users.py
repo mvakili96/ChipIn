@@ -35,3 +35,14 @@ def get_user(user_id):
         return jsonify({"error": "User not found"}), 404
 
     return jsonify(user), 200
+
+
+@users_bp.route("/<user_id>/<key>", methods=["GET"])
+def get_user_attr(user_id,key):
+    attribute = redis_service.get_user_attr(user_id,key)
+
+    if not attribute:
+        return jsonify({"error": "User or key not found"}), 404
+
+    return attribute, 200
+

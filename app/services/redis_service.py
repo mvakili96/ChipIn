@@ -74,6 +74,11 @@ class RedisService:
         users = [r.__dict__ for r in res.docs]
         return users
     
+    def get_user_attr(self, user_id: str, key: str) -> Any | None:
+        redis_key  = f"user:{user_id}"
+        user       = self.client.json().get(redis_key)
+        return user.get(key, None)
+ 
     # Group operations
     def save_group(self, group_dict: dict[str, str | list[str]]) -> dict[str, str | list[str]]:
         key = f"group:{group_dict['id']}"
@@ -88,6 +93,11 @@ class RedisService:
         res = self.client.ft("idx:groups").search("*")
         groups = [r.__dict__ for r in res.docs]
         return groups
+    
+    def get_group_attr(self, group_id: str, key: str) -> Any | None:
+        redis_key  = f"group:{group_id}"
+        group      = self.client.json().get(redis_key)
+        return group.get(key, None)
 
 # Singleton instance
 redis_service = RedisService()
