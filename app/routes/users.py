@@ -46,3 +46,9 @@ def get_user_attr(user_id,key):
 
     return attribute, 200
 
+@users_bp.route("/user-names", methods=["GET"])
+def get_user_names():
+    names = redis_service.get_all_user_names()
+
+    return names, 200
+

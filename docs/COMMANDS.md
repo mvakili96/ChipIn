@@ -57,6 +57,12 @@ curl -s http://localhost/groups/<group_id>/<key>
 ```
 where key is an attribute like the name, users, and so on.
 
+To delete a group:
+```bash
+curl -X DELETE http://localhost/groups/<group_id>
+```
+it deletes the entire group from database.
+
 ## To run tests
 If you just changed the code and want to run tests, you should first rebuild the container:
 ```bash

@@ -4,6 +4,7 @@ from redis.commands.json.path import Path
 from redis.commands.search.field import TextField
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from typing import Any
+import json
 
 
 class RedisService:
@@ -78,6 +79,25 @@ class RedisService:
         redis_key  = f"user:{user_id}"
         user       = self.client.json().get(redis_key)
         return user.get(key, None)
+    
+    def get_all_user_names(self) -> list[str]:
+        res = self.client.ft("idx:users").search("*")
+
+        names = []
+        for r in res.docs:
+            raw_json = getattr(r, "json", None)
+
+            try:
+                parsed = json.loads(raw_json)
+            except json.JSONDecodeError:
+                continue
+
+            name_val = parsed.get("name")
+            names.append(name_val)
+
+        return names
+
+
  
     # Group operations
     def save_group(self, group_dict: dict[str, str | list[str]]) -> dict[str, str | list[str]]:
@@ -98,6 +118,11 @@ class RedisService:
         redis_key  = f"group:{group_id}"
         group      = self.client.json().get(redis_key)
         return group.get(key, None)
+    
+    def delete_group(self, group_id: str) -> bool:
+        redis_key  = f"group:{group_id}"
+        result     = self.client.delete(redis_key)
+        return result == 1
 
 # Singleton instance
 redis_service = RedisService()
