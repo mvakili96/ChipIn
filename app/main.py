@@ -35,6 +35,7 @@ def home():
             "status": "running",
             "endpoints": {
                 "users": "/users",
+                "groups": "/groups",
             },
         }
     )
