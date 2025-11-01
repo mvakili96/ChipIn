@@ -6,21 +6,35 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from main import app as flask_app
-from services.redis_service import RedisService
 
 
 class MockRedisService:
     """Mock Redis Service for testing without real Redis.
     So we can use it in our tests without having to set up a real Redis instance.
-    This class provides a simple in-memory storage and can run multiple testssimultaneously."""
+    This class provides a simple in-memory storage and can run multiple tests simultaneously."""
 
     def __init__(self):
         self.data = {}  # In-memory storage
 
+    # User Operations
     def save_user(self, user_dict):
         key = f"user:{user_dict['id']}"
         self.data[key] = user_dict
         return user_dict
+
+    def get_user(self, user_id):
+        key = f"user:{user_id}"
+        return self.data.get(key)
+
+    def get_all_users(self):
+        return list(self.data.values())
+
+    def get_user_attr(self, user_id, key):
+        user = self.get_user(user_id)
+        return user.get(key) if user else None
+
+    def get_all_user_names(self):
+        return [user["name"] for user in self.get_all_users()]
 
 
 @pytest.fixture
