@@ -44,7 +44,8 @@ def get_user_attr(user_id,key):
     if not attribute:
         return jsonify({"error": "User or key not found"}), 404
 
-    return attribute, 200
+    return jsonify(attribute), 200
+
 
 @users_bp.route("/user-names", methods=["GET"])
 def get_user_names():

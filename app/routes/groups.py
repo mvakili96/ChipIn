@@ -48,7 +48,8 @@ def get_group_attr(group_id,key):
     if not attribute:
         return jsonify({"error": "Group or key not found"}), 404
 
-    return attribute, 200
+    return jsonify(attribute), 200
+
 
 @groups_bp.route("/<group_id>", methods=["DELETE"])
 def delete_group(group_id):
