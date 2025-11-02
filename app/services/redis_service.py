@@ -69,9 +69,13 @@ class RedisService:
         key = f"user:{user_id}"
         return self.client.json().get(key)
 
-    def get_all_users(self) -> list:
-        res = self.client.ft("idx:users").search("*")
-        users = [r.__dict__ for r in res.docs]
+    def get_all_users(self) -> list[dict]:
+        keys = self.client.keys("user:*")
+        users = []
+        for key in keys:
+            user = self.client.json().get(key)
+            if user:
+                users.append(user)
         return users
 
     def get_user_attr(self, user_id: str, key: str) -> Any | None:
@@ -109,6 +113,14 @@ class RedisService:
         return self.client.json().get(key)
 
     def get_all_groups(self) -> list:
+        keys = self.client.keys("group:*")
+        groups = []
+        for key in keys:
+            group = self.client.json().get(key)
+            if group:
+                groups.append(group)
+        return groups
+
         res = self.client.ft("idx:groups").search("*")
         groups = [r.__dict__ for r in res.docs]
         return groups

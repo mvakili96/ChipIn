@@ -122,6 +122,6 @@ def test_get_user_attr(client):
     # Get the user's attributes
     for k in ["name", "email"]:
         response = client.get(f"/users/{data['id']}/{k}")
+        this_data = json.loads(response.data)
         assert response.status_code == 200
-        this_data = response.data.decode("utf-8")
         assert this_data == data[k]
