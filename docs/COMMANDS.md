@@ -35,9 +35,9 @@ In order to add a group:
 ```bash
 curl -X POST http://localhost/groups/ \
      -H "Content-Type: application/json" \
-     -d '{"name": "Costco", "users": ["Moein","Mostafa","Mohammadjavad"]}'
+     -d '{"name": "Calgary", "users": ["Moein","Mostafa","Mohammadjavad"]}'
 ```
-it returns a Dictionary containing the group's information.
+it returns a Dictionary containing the group's information. Note that users must be valid, previously defined users.
 
 To get all groups:
 ```bash
@@ -62,6 +62,39 @@ To delete a group:
 curl -X DELETE http://localhost/groups/<group_id>
 ```
 it deletes the entire group from database.
+
+## Expense Commands
+In order to add an expense:
+```bash
+curl -X POST http://localhost/expenses/ \
+     -H "Content-Type: application/json" \
+     -d '{"name": "Costco", "group": "Calgary", "amount": 63.74, "payer": "Moein", "sharers": ["Moein","Mostafa"]}'
+```
+it returns a Dictionary containing the expenses's information.
+
+To get all expenses:
+```bash
+curl -s http://localhost/expenses/
+```
+it returns a list of Dictionaries containing the expenses' information.
+
+To get an expense:
+```bash
+curl -s http://localhost/expenses/<expense_id>
+```
+it returns a Dictionary containing the expense's information.
+
+To get an attribute of an expense:
+```bash
+curl -s http://localhost/expenses/<expense_id>/<key>
+```
+where key is an attribute like the name, payer, and so on.
+
+To delete an expense:
+```bash
+curl -X DELETE http://localhost/expenses/<expense_id>
+```
+it deletes the entire expense from database.
 
 ## To run tests
 If you just changed the code and want to run tests, you should first rebuild the container:
