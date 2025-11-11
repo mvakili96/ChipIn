@@ -37,7 +37,7 @@ class RedisService:
                         prefix=["user:"], index_type=IndexType.JSON
                     ),
                 )
-            
+
             # Group index
             try:
                 self.client.ft("idx:groups").info()
@@ -58,7 +58,6 @@ class RedisService:
 
         except Exception as e:
             print(f"Warning: Could not create indexes: {e}")
-        
 
     # User operations
     def save_user(self, user_dict: dict[str, str]) -> dict[str, str]:
@@ -70,16 +69,20 @@ class RedisService:
         key = f"user:{user_id}"
         return self.client.json().get(key)
 
-    def get_all_users(self) -> list:
-        res = self.client.ft("idx:users").search("*")
-        users = [r.__dict__ for r in res.docs]
+    def get_all_users(self) -> list[dict]:
+        keys = self.client.keys("user:*")
+        users = []
+        for key in keys:
+            user = self.client.json().get(key)
+            if user:
+                users.append(user)
         return users
-    
+
     def get_user_attr(self, user_id: str, key: str) -> Any | None:
-        redis_key  = f"user:{user_id}"
-        user       = self.client.json().get(redis_key)
+        redis_key = f"user:{user_id}"
+        user = self.client.json().get(redis_key)
         return user.get(key, None)
-    
+
     def get_all_user_names(self) -> list[str]:
         res = self.client.ft("idx:users").search("*")
 
@@ -97,10 +100,10 @@ class RedisService:
 
         return names
 
-
- 
     # Group operations
-    def save_group(self, group_dict: dict[str, str | list[str]]) -> dict[str, str | list[str]]:
+    def save_group(
+        self, group_dict: dict[str, str | list[str]]
+    ) -> dict[str, str | list[str]]:
         key = f"group:{group_dict['id']}"
         _ = self.client.json().set(key, Path.root_path(), group_dict)
         return group_dict
@@ -110,19 +113,28 @@ class RedisService:
         return self.client.json().get(key)
 
     def get_all_groups(self) -> list:
+        keys = self.client.keys("group:*")
+        groups = []
+        for key in keys:
+            group = self.client.json().get(key)
+            if group:
+                groups.append(group)
+        return groups
+
         res = self.client.ft("idx:groups").search("*")
         groups = [r.__dict__ for r in res.docs]
         return groups
-    
+
     def get_group_attr(self, group_id: str, key: str) -> Any | None:
-        redis_key  = f"group:{group_id}"
-        group      = self.client.json().get(redis_key)
+        redis_key = f"group:{group_id}"
+        group = self.client.json().get(redis_key)
         return group.get(key, None)
-    
+
     def delete_group(self, group_id: str) -> bool:
-        redis_key  = f"group:{group_id}"
-        result     = self.client.delete(redis_key)
+        redis_key = f"group:{group_id}"
+        result = self.client.delete(redis_key)
         return result == 1
+
 
 # Singleton instance
 redis_service = RedisService()
