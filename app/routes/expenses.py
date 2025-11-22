@@ -11,7 +11,8 @@ expenses_bp = Blueprint("expenses", __name__, url_prefix="/expenses")
 def create_expense():
     data: dict[str, Any] | None = request.get_json()
 
-    required_fields = ["name", "group", "amount", "payer", "sharers"]
+    # sharers could be all the group users by default, or otherwise defined
+    required_fields = ["name", "group", "amount", "payer"] 
 
     if data is None:
         return jsonify({"error": "Invalid request: invalid JSON"}), 400
@@ -19,9 +20,21 @@ def create_expense():
     for field in required_fields:
         if field not in data:
             return jsonify({"error": f"Invalid request: missing {field}"}), 400
-    #TODO: if sharers is missing, we can default to all group members
-    #TODO: group must be a valid group name that is previously defined
-    #TODO: payer and sharers must be among the group's users
+        
+    group_dict = redis_service.get_group_by_name(data["group"])
+
+    if group_dict is None:
+        return jsonify({"error": "Group linked to this expense is not found"}), 404
+    
+    if data["payer"] not in group_dict["users"]:
+        return jsonify({"error": "Payer is not found in the linked Group"}), 404
+    
+    if "sharers" not in data:
+        data["sharers"] = group_dict["users"]
+    else:
+        for name in data["sharers"]:
+            if name not in group_dict["users"]:
+                return jsonify({"error": "One or more sharers not found in the linked Group"}), 404
 
     expense = Expense(
             name=data["name"],

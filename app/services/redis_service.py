@@ -5,6 +5,7 @@ from redis.commands.search.field import TextField
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from typing import Any
 import json
+from redis.commands.search.query import Query
 
 
 class RedisService:
@@ -151,7 +152,18 @@ class RedisService:
         redis_key = f"group:{group_id}"
         result = self.client.delete(redis_key)
         return result == 1
-    
+        
+    def get_group_by_name(self, name: str) -> dict[str, Any] | None:
+        q = Query(f'@name:"{name}"')
+        res = self.client.ft("idx:groups").search(q)
+
+        if res.total == 0:
+            return None
+
+        doc = res.docs[0]
+        key = doc.id
+        return self.client.json().get(key)
+ 
     # Expense operations
     def save_expense(
         self, expense_dict: dict[str, Any]
