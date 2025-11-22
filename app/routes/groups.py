@@ -15,9 +15,9 @@ def create_group():
     if "name" not in data or "users" not in data:
         return jsonify({"error": "Invalid request: missing name or users"}), 400
 
-    registered_names = redis_service.get_all_user_names()
+    registered_user_names = redis_service.get_all_user_names()
     for name in data["users"]:
-        if name not in registered_names:
+        if name not in registered_user_names:
             return jsonify({"error": "One or more names not found"}), 404
 
     group = Group(name=data["name"], users=data["users"])

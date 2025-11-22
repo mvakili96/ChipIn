@@ -5,6 +5,7 @@ from redis.commands.search.field import TextField
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from typing import Any
 import json
+from redis.commands.search.query import Query
 
 
 class RedisService:
@@ -55,6 +56,27 @@ class RedisService:
                         prefix=["group:"], index_type=IndexType.JSON
                     ),
                 )
+
+            # Expense index
+            try:
+                self.client.ft("idx:expenses").info()
+            except Exception as e:
+                print(f"Warning: Could not get expense indexes information: {e}")
+                schema: tuple[TextField, TextField, TextField, TextField, TextField, TextField, TextField] = (
+                    TextField("$.name", as_name="name"),
+                    TextField("$.group", as_name="group"),
+                    TextField("$.amount", as_name="amount"),
+                    TextField("$.payer", as_name="payer"),
+                    TextField("$.sharers[*]", as_name="sharers"),
+                    TextField("$.id", as_name="id"),
+                    TextField("$.created_at", as_name="created_at"),
+                )
+                self.client.ft("idx:expenses").create_index(
+                    schema,
+                    definition=IndexDefinition(
+                        prefix=["expense:"], index_type=IndexType.JSON
+                    ),
+                )           
 
         except Exception as e:
             print(f"Warning: Could not create indexes: {e}")
@@ -121,10 +143,6 @@ class RedisService:
                 groups.append(group)
         return groups
 
-        res = self.client.ft("idx:groups").search("*")
-        groups = [r.__dict__ for r in res.docs]
-        return groups
-
     def get_group_attr(self, group_id: str, key: str) -> Any | None:
         redis_key = f"group:{group_id}"
         group = self.client.json().get(redis_key)
@@ -132,6 +150,48 @@ class RedisService:
 
     def delete_group(self, group_id: str) -> bool:
         redis_key = f"group:{group_id}"
+        result = self.client.delete(redis_key)
+        return result == 1
+        
+    def get_group_by_name(self, name: str) -> dict[str, Any] | None:
+        q = Query(f'@name:"{name}"')
+        res = self.client.ft("idx:groups").search(q)
+
+        if res.total == 0:
+            return None
+
+        doc = res.docs[0]
+        key = doc.id
+        return self.client.json().get(key)
+ 
+    # Expense operations
+    def save_expense(
+        self, expense_dict: dict[str, Any]
+    ) -> dict[str, Any]:
+        key = f"expense:{expense_dict['id']}"
+        _ = self.client.json().set(key, Path.root_path(), expense_dict)
+        return expense_dict
+    
+    def get_all_expenses(self) -> list:
+        keys = self.client.keys("expense:*")
+        expenses = []
+        for key in keys:
+            expense = self.client.json().get(key)
+            if expense:
+                expenses.append(expense)
+        return expenses
+    
+    def get_expense(self, expense_id: str) -> dict[str, Any] | None:
+        key = f"expense:{expense_id}"
+        return self.client.json().get(key)
+    
+    def get_expense_attr(self, expense_id: str, key: str) -> Any | None:
+        redis_key = f"expense:{expense_id}"
+        expense = self.client.json().get(redis_key)
+        return expense.get(key, None)
+    
+    def delete_expense(self, expense_id: str) -> bool:
+        redis_key = f"expense:{expense_id}"
         result = self.client.delete(redis_key)
         return result == 1
 
