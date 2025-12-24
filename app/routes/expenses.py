@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from typing import Any
 from models.expense import Expense
 from services.redis_service import redis_service
+from redis.commands.search.query import Query
 
 
 expenses_bp = Blueprint("expenses", __name__, url_prefix="/expenses")
@@ -45,7 +46,30 @@ def create_expense():
         )
     saved_expense = redis_service.save_expense(expense.to_dict())
 
-    return jsonify(saved_expense), 201
+    q = Query(f'@group:{{{data["group"]}}}').paging(0, 10_000)
+    res = redis_service.client.ft("idx:expenses").search(q)
+
+    group_expenses: list[dict[str, Any]] = []
+    for doc in res.docs:
+        exp = redis_service.client.json().get(doc.id)
+        if not exp:
+            continue
+
+        group_expenses.append({
+            "name": exp.get("name"),
+            "group": exp.get("group"),
+            "amount": exp.get("amount"),
+            "payer": exp.get("payer"),
+            "sharers": exp.get("sharers"),
+        })
+    
+    group_users: list[str] = group_dict["users"]
+
+    return jsonify({
+    "saved_expense": saved_expense,
+    "group_users": group_users,
+    "group_expenses": group_expenses,
+    }), 201
 
 
 @expenses_bp.route("/", methods=["GET"])

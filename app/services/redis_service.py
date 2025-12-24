@@ -1,7 +1,7 @@
 import os
 import redis
 from redis.commands.json.path import Path
-from redis.commands.search.field import TextField
+from redis.commands.search.field import TextField, NumericField, TagField
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from typing import Any
 import json
@@ -19,65 +19,56 @@ class RedisService:
         self._create_indexes()
 
     def _create_indexes(self):
-        """Create RediSearch indexes for efficient querying"""
+        rebuild = os.getenv("REBUILD_INDEXES", "0") == "1"
+
         try:
             # User index
-            try:
-                self.client.ft("idx:users").info()
-            except Exception as e:
-                print(f"Warning: Could not get user indexes information: {e}")
-                schema: tuple[TextField, TextField, TextField, TextField] = (
-                    TextField("$.name", as_name="name"),
-                    TextField("$.email", as_name="email"),
-                    TextField("$.id", as_name="id"),
-                    TextField("$.created_at", as_name="created_at"),
-                )
-                self.client.ft("idx:users").create_index(
-                    schema,
-                    definition=IndexDefinition(
-                        prefix=["user:"], index_type=IndexType.JSON
-                    ),
-                )
+            users_schema = (
+                TextField("$.name", as_name="name"),
+                TagField("$.email", as_name="email"),
+                TagField("$.id", as_name="id"),
+                TextField("$.created_at", as_name="created_at"),
+            )
+            users_def = IndexDefinition(prefix=["user:"], index_type=IndexType.JSON)
 
             # Group index
-            try:
-                self.client.ft("idx:groups").info()
-            except Exception as e:
-                print(f"Warning: Could not get group indexes information: {e}")
-                schema: tuple[TextField, TextField, TextField, TextField] = (
-                    TextField("$.name", as_name="name"),
-                    TextField("$.users[*]", as_name="users"),
-                    TextField("$.id", as_name="id"),
-                    TextField("$.created_at", as_name="created_at"),
-                )
-                self.client.ft("idx:groups").create_index(
-                    schema,
-                    definition=IndexDefinition(
-                        prefix=["group:"], index_type=IndexType.JSON
-                    ),
-                )
+            groups_schema = (
+                TextField("$.name", as_name="name"),
+                TagField("$.users[*]", as_name="users"),
+                TagField("$.id", as_name="id"),
+                TextField("$.created_at", as_name="created_at"),
+            )
+            groups_def = IndexDefinition(prefix=["group:"], index_type=IndexType.JSON)
 
             # Expense index
-            try:
-                self.client.ft("idx:expenses").info()
-            except Exception as e:
-                print(f"Warning: Could not get expense indexes information: {e}")
-                schema: tuple[TextField, TextField, TextField, TextField, TextField, TextField, TextField] = (
-                    TextField("$.name", as_name="name"),
-                    TextField("$.group", as_name="group"),
-                    TextField("$.amount", as_name="amount"),
-                    TextField("$.payer", as_name="payer"),
-                    TextField("$.sharers[*]", as_name="sharers"),
-                    TextField("$.id", as_name="id"),
-                    TextField("$.created_at", as_name="created_at"),
-                )
-                self.client.ft("idx:expenses").create_index(
-                    schema,
-                    definition=IndexDefinition(
-                        prefix=["expense:"], index_type=IndexType.JSON
-                    ),
-                )           
+            expenses_schema = (
+                TextField("$.name", as_name="name"),
+                TagField("$.group", as_name="group"),
+                NumericField("$.amount", as_name="amount"),
+                TagField("$.payer", as_name="payer"),
+                TagField("$.sharers[*]", as_name="sharers"),
+                TagField("$.id", as_name="id"),
+                TextField("$.created_at", as_name="created_at"),
+            )
+            expenses_def = IndexDefinition(prefix=["expense:"], index_type=IndexType.JSON)
 
+            def ensure(index_name: str, schema, definition: IndexDefinition):
+                if rebuild:
+                    try:
+                        self.client.ft(index_name).dropindex(delete_documents=False)
+                    except Exception:
+                        pass
+
+                # Create index if missing (or after drop)
+                try:
+                    self.client.ft(index_name).info()
+                except Exception:
+                    self.client.ft(index_name).create_index(schema, definition=definition)
+            
+            ensure("idx:users", users_schema, users_def)
+            ensure("idx:groups", groups_schema, groups_def)
+            ensure("idx:expenses", expenses_schema, expenses_def)
+         
         except Exception as e:
             print(f"Warning: Could not create indexes: {e}")
 
@@ -163,7 +154,7 @@ class RedisService:
         doc = res.docs[0]
         key = doc.id
         return self.client.json().get(key)
- 
+    
     # Expense operations
     def save_expense(
         self, expense_dict: dict[str, Any]
