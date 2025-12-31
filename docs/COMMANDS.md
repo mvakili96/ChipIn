@@ -61,7 +61,7 @@ To delete a group:
 ```bash
 curl -X DELETE http://localhost/groups/<group_id>
 ```
-it deletes the entire group from database.
+it deletes the entire group, its corresponding expenses, and all associated settlements from the database.
 
 ## Expense Commands
 In order to add an expense:
@@ -70,7 +70,7 @@ curl -X POST http://localhost/expenses/ \
      -H "Content-Type: application/json" \
      -d '{"name": "Costco", "group": "Calgary", "amount": 63.74, "payer": "Moein", "sharers": ["Moein","Mostafa"]}'
 ```
-it returns a Dictionary containing the expenses's information.
+it returns a Dictionary containing the expenses's information. It also creates/updates settlements.
 
 To get all expenses:
 ```bash
@@ -94,7 +94,27 @@ To delete an expense:
 ```bash
 curl -X DELETE http://localhost/expenses/<expense_id>
 ```
-it deletes the entire expense from database.
+it deletes the entire expense from database followed by updating settlements.
+
+To get the expenses of a group:
+```bash
+curl -s http://localhost/expenses/group/<group_id>
+```
+it returns a list of Dictionaries containing each expense's information. 
+
+## Settlement Commands
+To get settlements of all groups within the database:
+```bash
+curl -s http://localhost/settlements/group/
+```
+it returns a Dictionary where each value is a list that represents the settlements of its corresponding group. The keys are in the format of "settlement-group:group_id".
+
+To get the settlements of a group:
+```bash
+curl -s http://localhost/settlements/group/<group_id>
+```
+it returns a list of settlements where each settlement is a list of 3 elements. First element is the debtor, second is the creditor, and the third is the amount of money. 
+
 
 ## To run tests
 If you just changed the code and want to run tests, you should first rebuild the container:

@@ -6,6 +6,7 @@ from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from typing import Any
 import json
 from redis.commands.search.query import Query
+from models.settlement import Settlement
 
 
 class RedisService:
@@ -141,6 +142,22 @@ class RedisService:
 
     def delete_group(self, group_id: str) -> bool:
         redis_key = f"group:{group_id}"
+        group_dict = self.client.json().get(redis_key)
+        if not group_dict:
+            return False
+        
+        group_name = group_dict["name"]
+        if not group_name:
+            return False
+        
+        q = Query(f"@group:{{{group_name}}}").paging(0, 10_000)
+        res = self.client.ft("idx:expenses").search(q)
+
+        for doc in res.docs:
+            self.client.delete(doc.id)  
+
+        self.client.delete(f"settlement-group:{group_id}")
+
         result = self.client.delete(redis_key)
         return result == 1
         
@@ -183,8 +200,68 @@ class RedisService:
     
     def delete_expense(self, expense_id: str) -> bool:
         redis_key = f"expense:{expense_id}"
+        expense_dict = self.client.json().get(redis_key)
+        if not expense_dict:
+            return False
+        
+        group_name = expense_dict["group"]
+        group_dict = self.get_group_by_name(group_name)
+        if not group_dict:
+            return False
+        
+        group_id =  group_dict["id"]
+        group_users = group_dict["users"]
+
         result = self.client.delete(redis_key)
+
+        group_expenses = self.get_group_expenses(group_id)
+        tx = Settlement(group_expenses,group_users)
+
+        settlement_key = f"settlement-group:{group_dict['id']}"
+        tx_json = [list(t) for t in tx]
+        self.client.json().set(settlement_key, Path.root_path(), tx_json)
         return result == 1
+    
+    def get_group_expenses(self, group_id: str):
+        group_dict  = self.client.json().get(f"group:{group_id}")
+        
+        q = Query(f'@group:{{{group_dict["name"]}}}').paging(0, 10_000)
+        res = self.client.ft("idx:expenses").search(q)
+
+        group_expenses: list[dict[str, Any]] = []
+        for doc in res.docs:
+            exp = self.client.json().get(doc.id)
+            if not exp:
+                continue
+
+            group_expenses.append({
+                "name": exp.get("name"),
+                "group": exp.get("group"),
+                "amount": exp.get("amount"),
+                "payer": exp.get("payer"),
+                "sharers": exp.get("sharers"),
+            })
+        return group_expenses
+
+    # Settlement operations
+    def save_group_settlements(self, settlement: list[list], key: str) -> list[list]:
+        _ = self.client.json().set(key, Path.root_path(), settlement)
+        return settlement
+    
+    def get_all_group_settlements(self) -> list:
+        keys = self.client.keys("settlement-group:*")
+        groups_settlements = {}
+        for key in keys:
+            settlement = self.client.json().get(key)
+            if settlement:
+                groups_settlements[key] = settlement
+        return groups_settlements
+
+    def get_group_settlements(self, group_id: str) -> list[list]:
+        settlement_key = f"settlement-group:{group_id}"
+        return self.client.json().get(settlement_key)
+    
+
 
 
 # Singleton instance

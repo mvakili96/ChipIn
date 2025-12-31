@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify
 from typing import Any
 from models.expense import Expense
+from models.settlement import Settlement
 from services.redis_service import redis_service
 from redis.commands.search.query import Query
-
+from redis.commands.json.path import Path
 
 expenses_bp = Blueprint("expenses", __name__, url_prefix="/expenses")
 
@@ -46,29 +47,28 @@ def create_expense():
         )
     saved_expense = redis_service.save_expense(expense.to_dict())
 
-    q = Query(f'@group:{{{data["group"]}}}').paging(0, 10_000)
-    res = redis_service.client.ft("idx:expenses").search(q)
+    tx_prev = redis_service.get_group_settlements(group_dict['id'])
 
-    group_expenses: list[dict[str, Any]] = []
-    for doc in res.docs:
-        exp = redis_service.client.json().get(doc.id)
-        if not exp:
-            continue
+    tx_hist: list[tuple] | None = None
+    if tx_prev is not None:
+        tx_hist = [tuple(x) for x in tx_prev]
 
-        group_expenses.append({
-            "name": exp.get("name"),
-            "group": exp.get("group"),
-            "amount": exp.get("amount"),
-            "payer": exp.get("payer"),
-            "sharers": exp.get("sharers"),
-        })
-    
     group_users: list[str] = group_dict["users"]
+
+    if tx_hist is None:
+        group_expenses = redis_service.get_group_expenses(group_dict['id'])
+        tx = Settlement(group_expenses, group_users)
+    else:
+        group_expenses = [expense.to_dict()]
+        tx = Settlement(group_expenses, group_users, tx_hist)
+
+    tx_json = [list(t) for t in tx]
+    settlement_key = f"settlement-group:{group_dict['id']}"
+    redis_service.save_group_settlements(tx_json, settlement_key)
 
     return jsonify({
     "saved_expense": saved_expense,
-    "group_users": group_users,
-    "group_expenses": group_expenses,
+    "group_settlement": tx_json,
     }), 201
 
 
@@ -107,3 +107,14 @@ def delete_expense(expense_id):
         return jsonify({"error": "Expense not found"}), 404
 
     return jsonify({"message": f"Expense {expense_id} deleted successfully"}), 200
+
+
+@expenses_bp.route("/group/<group_id>", methods=["GET"])
+def get_group_expenses(group_id):
+    group_dict  = redis_service.get_group(group_id)
+    if not group_dict:
+        return jsonify({"error": "Group not found"}), 404
+    
+    group_expenses = redis_service.get_group_expenses(group_id)
+
+    return jsonify(group_expenses), 200
