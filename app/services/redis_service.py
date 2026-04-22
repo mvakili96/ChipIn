@@ -1,10 +1,12 @@
 import os
 import redis
 from redis.commands.json.path import Path
-from redis.commands.search.field import TextField
+from redis.commands.search.field import TextField, NumericField, TagField
 from redis.commands.search.indexDefinition import IndexDefinition, IndexType
 from typing import Any
 import json
+from redis.commands.search.query import Query
+from models.settlement import Settlement
 
 
 class RedisService:
@@ -18,44 +20,56 @@ class RedisService:
         self._create_indexes()
 
     def _create_indexes(self):
-        """Create RediSearch indexes for efficient querying"""
+        rebuild = os.getenv("REBUILD_INDEXES", "0") == "1"
+
         try:
             # User index
-            try:
-                self.client.ft("idx:users").info()
-            except Exception as e:
-                print(f"Warning: Could not get user indexes information: {e}")
-                schema: tuple[TextField, TextField, TextField, TextField] = (
-                    TextField("$.name", as_name="name"),
-                    TextField("$.email", as_name="email"),
-                    TextField("$.id", as_name="id"),
-                    TextField("$.created_at", as_name="created_at"),
-                )
-                self.client.ft("idx:users").create_index(
-                    schema,
-                    definition=IndexDefinition(
-                        prefix=["user:"], index_type=IndexType.JSON
-                    ),
-                )
+            users_schema = (
+                TextField("$.name", as_name="name"),
+                TagField("$.email", as_name="email"),
+                TagField("$.id", as_name="id"),
+                TextField("$.created_at", as_name="created_at"),
+            )
+            users_def = IndexDefinition(prefix=["user:"], index_type=IndexType.JSON)
 
             # Group index
-            try:
-                self.client.ft("idx:groups").info()
-            except Exception as e:
-                print(f"Warning: Could not get group indexes information: {e}")
-                schema: tuple[TextField, TextField, TextField, TextField] = (
-                    TextField("$.name", as_name="name"),
-                    TextField("$.users[*]", as_name="users"),
-                    TextField("$.id", as_name="id"),
-                    TextField("$.created_at", as_name="created_at"),
-                )
-                self.client.ft("idx:groups").create_index(
-                    schema,
-                    definition=IndexDefinition(
-                        prefix=["group:"], index_type=IndexType.JSON
-                    ),
-                )
+            groups_schema = (
+                TextField("$.name", as_name="name"),
+                TagField("$.users[*]", as_name="users"),
+                TagField("$.id", as_name="id"),
+                TextField("$.created_at", as_name="created_at"),
+            )
+            groups_def = IndexDefinition(prefix=["group:"], index_type=IndexType.JSON)
 
+            # Expense index
+            expenses_schema = (
+                TextField("$.name", as_name="name"),
+                TagField("$.group", as_name="group"),
+                NumericField("$.amount", as_name="amount"),
+                TagField("$.payer", as_name="payer"),
+                TagField("$.sharers[*]", as_name="sharers"),
+                TagField("$.id", as_name="id"),
+                TextField("$.created_at", as_name="created_at"),
+            )
+            expenses_def = IndexDefinition(prefix=["expense:"], index_type=IndexType.JSON)
+
+            def ensure(index_name: str, schema, definition: IndexDefinition):
+                if rebuild:
+                    try:
+                        self.client.ft(index_name).dropindex(delete_documents=False)
+                    except Exception:
+                        pass
+
+                # Create index if missing (or after drop)
+                try:
+                    self.client.ft(index_name).info()
+                except Exception:
+                    self.client.ft(index_name).create_index(schema, definition=definition)
+            
+            ensure("idx:users", users_schema, users_def)
+            ensure("idx:groups", groups_schema, groups_def)
+            ensure("idx:expenses", expenses_schema, expenses_def)
+         
         except Exception as e:
             print(f"Warning: Could not create indexes: {e}")
 
@@ -121,10 +135,6 @@ class RedisService:
                 groups.append(group)
         return groups
 
-        res = self.client.ft("idx:groups").search("*")
-        groups = [r.__dict__ for r in res.docs]
-        return groups
-
     def get_group_attr(self, group_id: str, key: str) -> Any | None:
         redis_key = f"group:{group_id}"
         group = self.client.json().get(redis_key)
@@ -132,8 +142,126 @@ class RedisService:
 
     def delete_group(self, group_id: str) -> bool:
         redis_key = f"group:{group_id}"
+        group_dict = self.client.json().get(redis_key)
+        if not group_dict:
+            return False
+        
+        group_name = group_dict["name"]
+        if not group_name:
+            return False
+        
+        q = Query(f"@group:{{{group_name}}}").paging(0, 10_000)
+        res = self.client.ft("idx:expenses").search(q)
+
+        for doc in res.docs:
+            self.client.delete(doc.id)  
+
+        self.client.delete(f"settlement-group:{group_id}")
+
         result = self.client.delete(redis_key)
         return result == 1
+        
+    def get_group_by_name(self, name: str) -> dict[str, Any] | None:
+        q = Query(f'@name:"{name}"')
+        res = self.client.ft("idx:groups").search(q)
+
+        if res.total == 0:
+            return None
+
+        doc = res.docs[0]
+        key = doc.id
+        return self.client.json().get(key)
+    
+    # Expense operations
+    def save_expense(
+        self, expense_dict: dict[str, Any]
+    ) -> dict[str, Any]:
+        key = f"expense:{expense_dict['id']}"
+        _ = self.client.json().set(key, Path.root_path(), expense_dict)
+        return expense_dict
+    
+    def get_all_expenses(self) -> list:
+        keys = self.client.keys("expense:*")
+        expenses = []
+        for key in keys:
+            expense = self.client.json().get(key)
+            if expense:
+                expenses.append(expense)
+        return expenses
+    
+    def get_expense(self, expense_id: str) -> dict[str, Any] | None:
+        key = f"expense:{expense_id}"
+        return self.client.json().get(key)
+    
+    def get_expense_attr(self, expense_id: str, key: str) -> Any | None:
+        redis_key = f"expense:{expense_id}"
+        expense = self.client.json().get(redis_key)
+        return expense.get(key, None)
+    
+    def delete_expense(self, expense_id: str) -> bool:
+        redis_key = f"expense:{expense_id}"
+        expense_dict = self.client.json().get(redis_key)
+        if not expense_dict:
+            return False
+        
+        group_name = expense_dict["group"]
+        group_dict = self.get_group_by_name(group_name)
+        if not group_dict:
+            return False
+        
+        group_id =  group_dict["id"]
+        group_users = group_dict["users"]
+
+        result = self.client.delete(redis_key)
+
+        group_expenses = self.get_group_expenses(group_id)
+        tx = Settlement(group_expenses,group_users)
+
+        settlement_key = f"settlement-group:{group_dict['id']}"
+        tx_json = [list(t) for t in tx]
+        self.client.json().set(settlement_key, Path.root_path(), tx_json)
+        return result == 1
+    
+    def get_group_expenses(self, group_id: str):
+        group_dict  = self.client.json().get(f"group:{group_id}")
+        
+        q = Query(f'@group:{{{group_dict["name"]}}}').paging(0, 10_000)
+        res = self.client.ft("idx:expenses").search(q)
+
+        group_expenses: list[dict[str, Any]] = []
+        for doc in res.docs:
+            exp = self.client.json().get(doc.id)
+            if not exp:
+                continue
+
+            group_expenses.append({
+                "name": exp.get("name"),
+                "group": exp.get("group"),
+                "amount": exp.get("amount"),
+                "payer": exp.get("payer"),
+                "sharers": exp.get("sharers"),
+            })
+        return group_expenses
+
+    # Settlement operations
+    def save_group_settlements(self, settlement: list[list], key: str) -> list[list]:
+        _ = self.client.json().set(key, Path.root_path(), settlement)
+        return settlement
+    
+    def get_all_group_settlements(self) -> list:
+        keys = self.client.keys("settlement-group:*")
+        groups_settlements = {}
+        for key in keys:
+            settlement = self.client.json().get(key)
+            if settlement:
+                groups_settlements[key] = settlement
+        return groups_settlements
+
+    def get_group_settlements(self, group_id: str) -> list[list]:
+        settlement_key = f"settlement-group:{group_id}"
+        return self.client.json().get(settlement_key)
+    
+
 
 
 # Singleton instance

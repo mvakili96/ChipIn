@@ -9,6 +9,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from routes.users import users_bp
 from routes.groups import groups_bp
+from routes.expenses import expenses_bp
+from routes.settlements import settlements_bp
 
 
 app = Flask(__name__)
@@ -16,6 +18,8 @@ app = Flask(__name__)
 # Register blueprints
 app.register_blueprint(users_bp)
 app.register_blueprint(groups_bp)
+app.register_blueprint(expenses_bp)
+app.register_blueprint(settlements_bp)
 
 # Redis connection
 redis_client = redis.Redis(
@@ -36,6 +40,8 @@ def home():
             "endpoints": {
                 "users": "/users",
                 "groups": "/groups",
+                "expenses": "/expenses",
+                "settlements": "/settlements",
             },
         }
     )
