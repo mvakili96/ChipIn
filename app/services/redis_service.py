@@ -73,6 +73,21 @@ class RedisService:
         except Exception as e:
             print(f"Warning: Could not create indexes: {e}")
 
+    @staticmethod
+    def _escape_tag_value(value: str) -> str:
+        special_chars = r',.<>{}[]"\'\\:;!@#$%^&*()-+=~ '
+        return "".join(f"\\{char}" if char in special_chars else char for char in str(value))
+
+    @staticmethod
+    def _expense_summary(expense: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "name": expense.get("name"),
+            "group": expense.get("group"),
+            "amount": expense.get("amount"),
+            "payer": expense.get("payer"),
+            "sharers": expense.get("sharers"),
+        }
+
     # User operations
     def save_user(self, user_dict: dict[str, str]) -> dict[str, str]:
         key = f"user:{user_dict['id']}"
@@ -225,7 +240,8 @@ class RedisService:
     def get_group_expenses(self, group_id: str):
         group_dict  = self.client.json().get(f"group:{group_id}")
         
-        q = Query(f'@group:{{{group_dict["name"]}}}').paging(0, 10_000)
+        group_name = self._escape_tag_value(group_dict["name"])
+        q = Query(f"@group:{{{group_name}}}").paging(0, 10_000)
         res = self.client.ft("idx:expenses").search(q)
 
         group_expenses: list[dict[str, Any]] = []
@@ -234,14 +250,26 @@ class RedisService:
             if not exp:
                 continue
 
-            group_expenses.append({
-                "name": exp.get("name"),
-                "group": exp.get("group"),
-                "amount": exp.get("amount"),
-                "payer": exp.get("payer"),
-                "sharers": exp.get("sharers"),
-            })
+            group_expenses.append(self._expense_summary(exp))
         return group_expenses
+
+    def get_user_paid_expenses(self, user_id: str):
+        user_dict = self.client.json().get(f"user:{user_id}")
+        if not user_dict:
+            return []
+
+        payer = self._escape_tag_value(user_dict["name"])
+        q = Query(f"@payer:{{{payer}}}").paging(0, 10_000)
+        res = self.client.ft("idx:expenses").search(q)
+
+        user_expenses: list[dict[str, Any]] = []
+        for doc in res.docs:
+            exp = self.client.json().get(doc.id)
+            if not exp:
+                continue
+
+            user_expenses.append(self._expense_summary(exp))
+        return user_expenses
 
     # Settlement operations
     def save_group_settlements(self, settlement: list[list], key: str) -> list[list]:

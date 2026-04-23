@@ -118,3 +118,14 @@ def get_group_expenses(group_id):
     group_expenses = redis_service.get_group_expenses(group_id)
 
     return jsonify(group_expenses), 200
+
+
+@expenses_bp.route("/user/paid/<user_id>", methods=["GET"])
+def get_user_paid_expenses(user_id):
+    user_dict = redis_service.get_user(user_id)
+    if not user_dict:
+        return jsonify({"error": "User not found"}), 404
+
+    user_expenses = redis_service.get_user_paid_expenses(user_id)
+
+    return jsonify(user_expenses), 200

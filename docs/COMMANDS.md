@@ -102,6 +102,12 @@ curl -s http://localhost/expenses/group/<group_id>
 ```
 it returns a list of Dictionaries containing each expense's information. 
 
+To get all the expenses paid by a user within all groups:
+```bash
+curl -s http://localhost/expenses/user/paid/<user_id>
+```
+it returns a list of Dictionaries containing each expense whose payer is the user with the given ID.
+
 ## Settlement Commands
 To get settlements of all groups within the database:
 ```bash
