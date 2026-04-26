@@ -121,6 +121,12 @@ curl -s http://localhost/settlements/group/<group_id>
 ```
 it returns a list of settlements where each settlement is a list of 3 elements. First element is the debtor, second is the creditor, and the third is the amount of money. 
 
+To get the settlements involving a user:
+```bash
+curl -s http://localhost/settlements/user/<user_id>
+```
+it returns a list of settlements where the user is either the debtor or the creditor. The format is the same 3-element settlement format already used for groups.
+
 
 ## To run tests
 If you just changed the code and want to run tests, you should first rebuild the container:
