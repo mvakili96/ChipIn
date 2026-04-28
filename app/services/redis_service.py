@@ -81,6 +81,7 @@ class RedisService:
     @staticmethod
     def _expense_summary(expense: dict[str, Any]) -> dict[str, Any]:
         return {
+            "id": expense.get("id"),
             "name": expense.get("name"),
             "group": expense.get("group"),
             "amount": expense.get("amount"),
