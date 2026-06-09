@@ -102,6 +102,12 @@ curl -s http://localhost/expenses/group/<group_id>
 ```
 it returns a list of Dictionaries containing each expense's information. 
 
+To get all the expenses paid by a user within all groups:
+```bash
+curl -s http://localhost/expenses/user/paid/<user_id>
+```
+it returns a list of Dictionaries containing each expense whose payer is the user with the given ID.
+
 ## Settlement Commands
 To get settlements of all groups within the database:
 ```bash
@@ -114,6 +120,12 @@ To get the settlements of a group:
 curl -s http://localhost/settlements/group/<group_id>
 ```
 it returns a list of settlements where each settlement is a list of 3 elements. First element is the debtor, second is the creditor, and the third is the amount of money. 
+
+To get the settlements involving a user:
+```bash
+curl -s http://localhost/settlements/user/<user_id>
+```
+it returns a list of settlements where the user is either the debtor or the creditor. The format is the same 3-element settlement format already used for groups.
 
 
 ## To run tests
