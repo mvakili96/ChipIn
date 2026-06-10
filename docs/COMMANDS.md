@@ -3,6 +3,13 @@
 ## Docker Compose
 docker compose up --build
 
+## Web Client
+Open the browser client after Docker Compose starts:
+
+```bash
+http://localhost/client
+```
+
 ## User Commands
 In order to add a user:
 ```bash

@@ -1,0 +1,559 @@
+"use strict";
+
+const state = {
+  users: [],
+  groups: [],
+  expenses: [],
+  settlements: {},
+  selectedSettlementGroupId: "",
+};
+
+const els = {
+  apiStatus: document.querySelector("#api-status"),
+  refreshButton: document.querySelector("#refresh-button"),
+  toast: document.querySelector("#toast"),
+  userForm: document.querySelector("#user-form"),
+  userName: document.querySelector("#user-name"),
+  userEmail: document.querySelector("#user-email"),
+  groupForm: document.querySelector("#group-form"),
+  groupName: document.querySelector("#group-name"),
+  groupUsers: document.querySelector("#group-users"),
+  expenseForm: document.querySelector("#expense-form"),
+  expenseName: document.querySelector("#expense-name"),
+  expenseAmount: document.querySelector("#expense-amount"),
+  expenseGroup: document.querySelector("#expense-group"),
+  expensePayer: document.querySelector("#expense-payer"),
+  expenseSharers: document.querySelector("#expense-sharers"),
+  settlementGroup: document.querySelector("#settlement-group"),
+  peopleCount: document.querySelector("#people-count"),
+  groupsCount: document.querySelector("#groups-count"),
+  expensesCount: document.querySelector("#expenses-count"),
+  expensesTotal: document.querySelector("#expenses-total"),
+  usersTable: document.querySelector("#users-table"),
+  groupsList: document.querySelector("#groups-list"),
+  expensesTable: document.querySelector("#expenses-table"),
+  settlementsList: document.querySelector("#settlements-list"),
+  overviewSettlements: document.querySelector("#overview-settlements"),
+};
+
+const currency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
+function iconTrash() {
+  return `
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M3 6h18"></path>
+      <path d="M8 6V4h8v2"></path>
+      <path d="M19 6l-1 14H6L5 6"></path>
+      <path d="M10 11v5"></path>
+      <path d="M14 11v5"></path>
+    </svg>
+  `;
+}
+
+function formatMoney(value) {
+  const amount = Number(value) || 0;
+  return currency.format(amount);
+}
+
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function groupSettlementKey(groupId) {
+  return `settlement-group:${groupId}`;
+}
+
+function groupById(groupId) {
+  return state.groups.find((group) => group.id === groupId);
+}
+
+function groupByName(name) {
+  return state.groups.find((group) => group.name === name);
+}
+
+function setApiStatus(kind, text) {
+  els.apiStatus.dataset.state = kind;
+  els.apiStatus.textContent = text;
+}
+
+let toastTimer;
+function showToast(message, kind = "info") {
+  clearTimeout(toastTimer);
+  els.toast.textContent = message;
+  els.toast.dataset.kind = kind;
+  els.toast.classList.add("is-visible");
+  toastTimer = window.setTimeout(() => {
+    els.toast.classList.remove("is-visible");
+  }, 3200);
+}
+
+async function request(path, options = {}) {
+  const response = await fetch(path, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
+
+  if (!response.ok) {
+    const message =
+      typeof payload === "object" && payload !== null
+        ? payload.error || payload.warning || JSON.stringify(payload)
+        : payload || "Request failed";
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
+async function refreshData({ quiet = false } = {}) {
+  if (!quiet) {
+    setApiStatus("loading", "Refreshing");
+  }
+
+  try {
+    const [users, groups, expenses, settlements] = await Promise.all([
+      request("/users/"),
+      request("/groups/"),
+      request("/expenses/"),
+      request("/settlements/group/").catch(() => ({})),
+    ]);
+
+    state.users = users;
+    state.groups = groups;
+    state.expenses = expenses;
+    state.settlements = settlements || {};
+
+    if (
+      state.selectedSettlementGroupId &&
+      !state.groups.some((group) => group.id === state.selectedSettlementGroupId)
+    ) {
+      state.selectedSettlementGroupId = "";
+    }
+
+    if (!state.selectedSettlementGroupId && state.groups[0]) {
+      state.selectedSettlementGroupId = state.groups[0].id;
+    }
+
+    render();
+    setApiStatus("ok", "API online");
+  } catch (error) {
+    setApiStatus("error", "API offline");
+    showToast(error.message, "error");
+  }
+}
+
+function render() {
+  renderSummary();
+  renderUserOptions();
+  renderExpenseGroupOptions();
+  renderSettlementGroupOptions();
+  renderUsersTable();
+  renderGroups();
+  renderExpenses();
+  renderSettlements();
+}
+
+function renderSummary() {
+  const total = state.expenses.reduce(
+    (sum, expense) => sum + Number(expense.amount || 0),
+    0,
+  );
+
+  els.peopleCount.textContent = String(state.users.length);
+  els.groupsCount.textContent = String(state.groups.length);
+  els.expensesCount.textContent = String(state.expenses.length);
+  els.expensesTotal.textContent = formatMoney(total);
+}
+
+function renderUserOptions() {
+  els.groupUsers.innerHTML = state.users
+    .map(
+      (user) => `
+        <label class="check-item">
+          <input type="checkbox" name="members" value="${escapeHtml(user.name)}">
+          <span>${escapeHtml(user.name)}</span>
+        </label>
+      `,
+    )
+    .join("");
+}
+
+function renderExpenseGroupOptions() {
+  els.expenseGroup.innerHTML = state.groups.length
+    ? state.groups
+        .map(
+          (group) =>
+            `<option value="${escapeHtml(group.name)}">${escapeHtml(group.name)}</option>`,
+        )
+        .join("")
+    : `<option value="">No groups</option>`;
+
+  els.expenseGroup.disabled = state.groups.length === 0;
+  updateExpensePeople();
+}
+
+function updateExpensePeople() {
+  const group = groupByName(els.expenseGroup.value);
+  const members = group ? group.users || [] : [];
+
+  els.expensePayer.innerHTML = members.length
+    ? members
+        .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+        .join("")
+    : `<option value="">No members</option>`;
+  els.expensePayer.disabled = members.length === 0;
+
+  els.expenseSharers.innerHTML = members
+    .map(
+      (name) => `
+        <label class="check-item">
+          <input type="checkbox" name="sharers" value="${escapeHtml(name)}" checked>
+          <span>${escapeHtml(name)}</span>
+        </label>
+      `,
+    )
+    .join("");
+}
+
+function renderSettlementGroupOptions() {
+  els.settlementGroup.innerHTML = state.groups.length
+    ? state.groups
+        .map(
+          (group) => `
+            <option value="${escapeHtml(group.id)}" ${
+              group.id === state.selectedSettlementGroupId ? "selected" : ""
+            }>
+              ${escapeHtml(group.name)}
+            </option>
+          `,
+        )
+        .join("")
+    : `<option value="">No groups</option>`;
+
+  els.settlementGroup.disabled = state.groups.length === 0;
+}
+
+function renderUsersTable() {
+  if (!state.users.length) {
+    els.usersTable.innerHTML = `
+      <tr>
+        <td colspan="2"><div class="empty-state">No people</div></td>
+      </tr>
+    `;
+    return;
+  }
+
+  els.usersTable.innerHTML = state.users
+    .map(
+      (user) => `
+        <tr>
+          <td><strong>${escapeHtml(user.name)}</strong></td>
+          <td class="muted">${escapeHtml(user.email)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderGroups() {
+  if (!state.groups.length) {
+    els.groupsList.innerHTML = `<div class="empty-state">No groups</div>`;
+    return;
+  }
+
+  els.groupsList.innerHTML = state.groups
+    .map((group) => {
+      const members = (group.users || [])
+        .map((name) => `<span class="chip">${escapeHtml(name)}</span>`)
+        .join("");
+
+      return `
+        <article class="record-card">
+          <header>
+            <div>
+              <h3>${escapeHtml(group.name)}</h3>
+              <small>${escapeHtml(group.id)}</small>
+            </div>
+            <button class="danger-button" type="button" data-delete-group="${escapeHtml(
+              group.id,
+            )}" title="Delete group" aria-label="Delete ${escapeHtml(group.name)}">
+              ${iconTrash()}
+            </button>
+          </header>
+          <div class="chip-row">${members}</div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderExpenses() {
+  if (!state.expenses.length) {
+    els.expensesTable.innerHTML = `
+      <tr>
+        <td colspan="6"><div class="empty-state">No expenses</div></td>
+      </tr>
+    `;
+    return;
+  }
+
+  els.expensesTable.innerHTML = state.expenses
+    .map(
+      (expense) => `
+        <tr>
+          <td><strong>${escapeHtml(expense.name)}</strong></td>
+          <td>${escapeHtml(expense.group)}</td>
+          <td>${escapeHtml(expense.payer)}</td>
+          <td>${escapeHtml((expense.sharers || []).join(", "))}</td>
+          <td class="numeric"><strong>${formatMoney(expense.amount)}</strong></td>
+          <td class="action-cell">
+            <button class="danger-button" type="button" data-delete-expense="${escapeHtml(
+              expense.id,
+            )}" title="Delete expense" aria-label="Delete ${escapeHtml(expense.name)}">
+              ${iconTrash()}
+            </button>
+          </td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function allNamedSettlements() {
+  return Object.entries(state.settlements).reduce((items, [key, settlements]) => {
+    const groupId = key.replace("settlement-group:", "");
+    const group = groupById(groupId);
+    const groupName = group ? group.name : groupId;
+
+    (settlements || []).forEach(([debtor, creditor, amount]) => {
+      items.push({
+        groupName,
+        debtor,
+        creditor,
+        amount,
+      });
+    });
+
+    return items;
+  }, []);
+}
+
+function renderSettlements() {
+  const group = groupById(state.selectedSettlementGroupId);
+  const selectedKey = state.selectedSettlementGroupId
+    ? groupSettlementKey(state.selectedSettlementGroupId)
+    : "";
+  const settlements = state.settlements[selectedKey] || [];
+  const allSettlements = allNamedSettlements();
+
+  els.settlementsList.innerHTML = settlements.length
+    ? settlements
+        .map(([debtor, creditor, amount]) =>
+          settlementMarkup({
+            debtor,
+            creditor,
+            amount,
+            groupName: group ? group.name : "",
+          }),
+        )
+        .join("")
+    : `<div class="empty-state">No balances</div>`;
+
+  els.overviewSettlements.innerHTML = allSettlements.length
+    ? allSettlements.slice(0, 6).map(settlementMarkup).join("")
+    : `<div class="empty-state">No balances</div>`;
+}
+
+function settlementMarkup({ debtor, creditor, amount, groupName }) {
+  return `
+    <article class="settlement-item">
+      <span>
+        <strong>${escapeHtml(debtor)}</strong>
+        pays
+        <strong>${escapeHtml(creditor)}</strong>
+        ${groupName ? `<span class="muted">in ${escapeHtml(groupName)}</span>` : ""}
+      </span>
+      <b>${formatMoney(amount)}</b>
+    </article>
+  `;
+}
+
+function setSubmitting(form, isSubmitting) {
+  const button = form.querySelector("button[type='submit']");
+  if (button) {
+    button.disabled = isSubmitting;
+  }
+}
+
+async function createUser(event) {
+  event.preventDefault();
+  setSubmitting(els.userForm, true);
+
+  try {
+    await request("/users/", {
+      method: "POST",
+      body: JSON.stringify({
+        name: els.userName.value.trim(),
+        email: els.userEmail.value.trim(),
+      }),
+    });
+    els.userForm.reset();
+    await refreshData({ quiet: true });
+    showToast("Person added");
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    setSubmitting(els.userForm, false);
+  }
+}
+
+async function createGroup(event) {
+  event.preventDefault();
+  const members = Array.from(
+    els.groupUsers.querySelectorAll("input[name='members']:checked"),
+  ).map((input) => input.value);
+
+  if (!members.length) {
+    showToast("Choose at least one member", "error");
+    return;
+  }
+
+  setSubmitting(els.groupForm, true);
+
+  try {
+    await request("/groups/", {
+      method: "POST",
+      body: JSON.stringify({
+        name: els.groupName.value.trim(),
+        users: members,
+      }),
+    });
+    els.groupForm.reset();
+    await refreshData({ quiet: true });
+    showToast("Group created");
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    setSubmitting(els.groupForm, false);
+  }
+}
+
+async function createExpense(event) {
+  event.preventDefault();
+  const sharers = Array.from(
+    els.expenseSharers.querySelectorAll("input[name='sharers']:checked"),
+  ).map((input) => input.value);
+
+  if (!sharers.length) {
+    showToast("Choose at least one sharer", "error");
+    return;
+  }
+
+  setSubmitting(els.expenseForm, true);
+
+  try {
+    await request("/expenses/", {
+      method: "POST",
+      body: JSON.stringify({
+        name: els.expenseName.value.trim(),
+        group: els.expenseGroup.value,
+        amount: Number(els.expenseAmount.value),
+        payer: els.expensePayer.value,
+        sharers,
+      }),
+    });
+    els.expenseForm.reset();
+    await refreshData({ quiet: true });
+    showToast("Expense added");
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    setSubmitting(els.expenseForm, false);
+  }
+}
+
+async function deleteGroup(groupId) {
+  try {
+    await request(`/groups/${encodeURIComponent(groupId)}`, { method: "DELETE" });
+    await refreshData({ quiet: true });
+    showToast("Group deleted");
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
+async function deleteExpense(expenseId) {
+  try {
+    await request(`/expenses/${encodeURIComponent(expenseId)}`, {
+      method: "DELETE",
+    });
+    await refreshData({ quiet: true });
+    showToast("Expense deleted");
+  } catch (error) {
+    showToast(error.message, "error");
+  }
+}
+
+function setupTabs() {
+  const tabs = Array.from(document.querySelectorAll("[role='tab']"));
+  const panels = Array.from(document.querySelectorAll("[role='tabpanel']"));
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      tabs.forEach((item) => {
+        item.classList.toggle("is-active", item === tab);
+        item.setAttribute("aria-selected", item === tab ? "true" : "false");
+      });
+
+      panels.forEach((panel) => {
+        const isActive = panel.id === tab.getAttribute("aria-controls");
+        panel.classList.toggle("is-active", isActive);
+        panel.hidden = !isActive;
+      });
+    });
+  });
+}
+
+function setupEvents() {
+  setupTabs();
+  els.refreshButton.addEventListener("click", () => refreshData());
+  els.userForm.addEventListener("submit", createUser);
+  els.groupForm.addEventListener("submit", createGroup);
+  els.expenseForm.addEventListener("submit", createExpense);
+  els.expenseGroup.addEventListener("change", updateExpensePeople);
+  els.settlementGroup.addEventListener("change", (event) => {
+    state.selectedSettlementGroupId = event.target.value;
+    renderSettlements();
+  });
+
+  document.addEventListener("click", (event) => {
+    const groupButton = event.target.closest("[data-delete-group]");
+    if (groupButton) {
+      deleteGroup(groupButton.dataset.deleteGroup);
+      return;
+    }
+
+    const expenseButton = event.target.closest("[data-delete-expense]");
+    if (expenseButton) {
+      deleteExpense(expenseButton.dataset.deleteExpense);
+    }
+  });
+}
+
+setupEvents();
+refreshData();
