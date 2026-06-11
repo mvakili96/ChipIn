@@ -20,7 +20,7 @@ The codebase currently focuses on:
 - storing users, groups, expenses, and settlements in Redis JSON documents
 - querying expense data through Redis Stack indexes
 - exposing resource-oriented HTTP routes with Flask
-- serving a small browser client for the core shared-expense workflow
+- serving a small admin panel for the core shared-expense workflow
 - running locally through Docker Compose
 
 ## Current Functionality
@@ -51,7 +51,7 @@ The API currently supports:
   - fetch settlements for all groups
   - fetch settlements involving a user
 
-- `web client`
+- `admin panel`
   - create users, groups, and expenses from the browser
   - view people, groups, expenses, and settlements
 
@@ -73,7 +73,7 @@ docker compose up --build
 
 From there, the main places to look are:
 
-- `http://localhost/client` for the browser client
+- `http://localhost/admin` for the admin panel
 - [docs/COMMANDS.md](docs/COMMANDS.md) for example API usage with `curl`
 - [docs/GET_STARTED_REDIS-STACK.md](docs/GET_STARTED_REDIS-STACK.md) for Redis Stack notes and CLI-oriented indexing examples
 - [docs/APP_STRUCTURE.md](docs/APP_STRUCTURE.md) for the current repository layout
@@ -102,7 +102,7 @@ Key areas:
 - [app/routes/](app/routes): API routes for users, groups, expenses, and settlements
 - [app/models/](app/models): domain objects and settlement calculation logic
 - [app/services/redis_service.py](app/services/redis_service.py): Redis access layer and search/query helpers
-- [app/static/client/](app/static/client): browser client served at `/client`
+- [app/static/admin/](app/static/admin): admin panel served at `/admin`
 - [app/tests/](app/tests): route-level tests with a mocked Redis service
 
 ## Where To Look First
@@ -118,7 +118,7 @@ If you are visiting the repository for the first time:
 
 - The app is designed to run with Redis Stack and relies on RedisJSON and RediSearch features.
 - The Docker setup defines separate `app` and `redis` services in [docker-compose.yml](docker-compose.yml).
-- The web client is served by Flask at `/client` and calls the existing JSON routes directly.
+- The admin panel is served by Flask at `/admin` and calls the existing JSON routes directly.
 - Tests are written with pytest and use a mocked in-memory Redis service instead of requiring a real Redis instance for test execution.
 - Some detailed Redis CLI examples in [docs/GET_STARTED_REDIS-STACK.md](docs/GET_STARTED_REDIS-STACK.md) describe the underlying data ideas, but the application code is the source of truth for the current API field names and route behavior.
 

@@ -3,11 +3,11 @@
 ## Docker Compose
 docker compose up --build
 
-## Web Client
-Open the browser client after Docker Compose starts:
+## Admin Panel
+Open the admin panel after Docker Compose starts:
 
 ```bash
-http://localhost/client
+http://localhost/admin
 ```
 
 ## User Commands

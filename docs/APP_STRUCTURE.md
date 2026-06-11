@@ -24,13 +24,13 @@ chipin/
 │   ├── services/
 │   │   └── redis_service.py
 │   ├── static/
-│   │   └── client/
+│   │   └── admin/
 │   │       ├── app.js
 │   │       ├── chipin-mark.svg
 │   │       ├── index.html
 │   │       └── styles.css
 │   └── tests/
-│       ├── test_client.py
+│       ├── test_admin.py
 │       ├── conftest.py
 │       ├── test_expenses.py
 │       ├── test_groups.py
@@ -50,7 +50,7 @@ chipin/
   Builds the application image and installs Python dependencies.
 
 - `app/main.py`:
-  Flask entrypoint. Registers the `users`, `groups`, `expenses`, and `settlements` blueprints, serves the web client at `/client`, and exposes a small health-style Redis test route.
+  Flask entrypoint. Registers the `users`, `groups`, `expenses`, and `settlements` blueprints, serves the admin panel at `/admin`, and exposes a small health-style Redis test route.
 
 - `app/models/`:
   Domain objects and settlement logic.
@@ -69,12 +69,12 @@ chipin/
 - `app/services/redis_service.py`:
   Redis access layer. Handles JSON storage, search indexes, and query helpers for users, groups, expenses, and settlements.
 
-- `app/static/client/`:
-  Static browser client for creating people, groups, and expenses and viewing balances.
+- `app/static/admin/`:
+  Static admin panel for creating people, groups, and expenses and viewing balances.
 
 - `app/tests/`:
   Pytest-based API tests using a mocked in-memory Redis service.
-  - `test_client.py`: web client serving tests
+  - `test_admin.py`: admin panel serving tests
   - `conftest.py`: shared fixtures and mock service
   - `test_users.py`: user route tests
   - `test_groups.py`: group route tests

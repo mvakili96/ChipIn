@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, redirect, send_from_directory, url_for
 import redis
 import os
 import sys
@@ -42,17 +42,23 @@ def home():
                 "groups": "/groups",
                 "expenses": "/expenses",
                 "settlements": "/settlements",
-                "client": "/client",
+                "admin": "/admin",
             },
         }
     )
 
 
+@app.route("/admin")
+@app.route("/admin/")
+def admin_panel():
+    admin_dir = os.path.join(app.static_folder, "admin")
+    return send_from_directory(admin_dir, "index.html")
+
+
 @app.route("/client")
 @app.route("/client/")
-def web_client():
-    client_dir = os.path.join(app.static_folder, "client")
-    return send_from_directory(client_dir, "index.html")
+def legacy_web_client():
+    return redirect(url_for("admin_panel"), code=308)
 
 
 @app.route("/test-redis")
