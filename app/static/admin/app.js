@@ -332,11 +332,6 @@ function renderGroups() {
               <small>${escapeHtml(group.id)}</small>
             </span>
             <span class="chip-row">${members}</span>
-            <span class="group-card-open" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="m9 18 6-6-6-6"></path>
-              </svg>
-            </span>
           </button>
           <div class="record-actions">
             <button class="danger-button" type="button" data-delete-group="${escapeHtml(

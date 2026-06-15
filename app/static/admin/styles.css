@@ -529,7 +529,6 @@ tr:last-child td {
 
 .group-card-button {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   min-width: 0;
   min-height: 136px;
@@ -558,41 +557,6 @@ tr:last-child td {
   font-size: 1rem;
   line-height: 1.2;
   overflow-wrap: anywhere;
-}
-
-.group-card-button .chip-row {
-  grid-column: 1 / -1;
-}
-
-.group-card-open {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--green-deep);
-  background: var(--panel);
-}
-
-.group-card-open svg {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.2;
-}
-
-.group-card.is-selected .group-card-open {
-  border-color: var(--green);
-  background: var(--green-deep);
-  color: #fff;
-}
-
-.group-card-main + .group-card-open {
-  align-self: start;
 }
 
 .record-actions {
