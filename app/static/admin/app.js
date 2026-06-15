@@ -32,6 +32,7 @@ const els = {
   averageExpensesGroup: document.querySelector("#average-expenses-group"),
   averageExpensesUser: document.querySelector("#average-expenses-user"),
   usersTable: document.querySelector("#users-table"),
+  usersManageTable: document.querySelector("#users-manage-table"),
   groupsList: document.querySelector("#groups-list"),
   groupDetail: document.querySelector("#group-detail"),
   expensesTable: document.querySelector("#expenses-table"),
@@ -205,6 +206,7 @@ function render() {
   renderExpenseGroupOptions();
   renderSettlementGroupOptions();
   renderUsersTable();
+  renderUsersManageTable();
   renderGroups();
   renderGroupDetail();
   renderExpenses();
@@ -310,6 +312,29 @@ function renderUsersTable() {
         <tr>
           <td><strong>${escapeHtml(user.name)}</strong></td>
           <td class="muted">${escapeHtml(user.email)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderUsersManageTable() {
+  if (!state.users.length) {
+    els.usersManageTable.innerHTML = `
+      <tr>
+        <td colspan="4"><div class="empty-state">No users</div></td>
+      </tr>
+    `;
+    return;
+  }
+
+  els.usersManageTable.innerHTML = state.users
+    .map(
+      (user) => `
+        <tr data-user-row="${escapeHtml(user.id)}">
+          <td><strong>${escapeHtml(user.name)}</strong></td>
+          <td class="muted">${escapeHtml(user.email)}</td>
+          <td><small class="muted">${escapeHtml(user.id)}</small></td>
         </tr>
       `,
     )
