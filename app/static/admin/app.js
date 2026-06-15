@@ -36,6 +36,7 @@ const els = {
   expensesTable: document.querySelector("#expenses-table"),
   settlementsList: document.querySelector("#settlements-list"),
   overviewSettlements: document.querySelector("#overview-settlements"),
+  overviewPersonBalances: document.querySelector("#overview-person-balances"),
 };
 
 const currency = new Intl.NumberFormat("en-US", {
@@ -493,6 +494,24 @@ function allNamedSettlements() {
   }, []);
 }
 
+function aggregatedPersonBalances() {
+  const balances = new Map();
+
+  state.users.forEach((user) => {
+    balances.set(user.name, 0);
+  });
+
+  allNamedSettlements().forEach(({ debtor, creditor, amount }) => {
+    const value = Number(amount) || 0;
+    balances.set(debtor, (balances.get(debtor) || 0) - value);
+    balances.set(creditor, (balances.get(creditor) || 0) + value);
+  });
+
+  return Array.from(balances.entries())
+    .map(([name, balance]) => ({ name, balance }))
+    .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance) || a.name.localeCompare(b.name));
+}
+
 function renderSettlements() {
   const group = groupById(state.selectedSettlementGroupId);
   const selectedKey = state.selectedSettlementGroupId
@@ -500,6 +519,7 @@ function renderSettlements() {
     : "";
   const settlements = state.settlements[selectedKey] || [];
   const allSettlements = allNamedSettlements();
+  const personBalances = aggregatedPersonBalances();
 
   els.settlementsList.innerHTML = settlements.length
     ? settlements
@@ -517,6 +537,10 @@ function renderSettlements() {
   els.overviewSettlements.innerHTML = allSettlements.length
     ? allSettlements.slice(0, 6).map(settlementMarkup).join("")
     : `<div class="empty-state">No balances</div>`;
+
+  els.overviewPersonBalances.innerHTML = personBalances.length
+    ? personBalances.map(personBalanceMarkup).join("")
+    : `<div class="empty-state">No people</div>`;
 }
 
 function settlementMarkup({ debtor, creditor, amount, groupName }) {
@@ -529,6 +553,19 @@ function settlementMarkup({ debtor, creditor, amount, groupName }) {
         ${groupName ? `<span class="muted">in ${escapeHtml(groupName)}</span>` : ""}
       </span>
       <b>${formatMoney(amount)}</b>
+    </article>
+  `;
+}
+
+function personBalanceMarkup({ name, balance }) {
+  const isSettled = Math.abs(balance) < 0.005;
+  const kind = isSettled ? "settled" : balance > 0 ? "owed" : "owes";
+  const label = isSettled ? "settled" : balance > 0 ? "gets back" : "owes";
+
+  return `
+    <article class="person-balance-item" data-kind="${kind}">
+      <span><strong>${escapeHtml(name)}</strong> ${label}</span>
+      <b>${isSettled ? formatMoney(0) : formatMoney(Math.abs(balance))}</b>
     </article>
   `;
 }
