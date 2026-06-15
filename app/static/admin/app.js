@@ -5,6 +5,7 @@ const state = {
   groups: [],
   expenses: [],
   settlements: {},
+  selectedGroupId: "",
   selectedSettlementGroupId: "",
 };
 
@@ -31,6 +32,7 @@ const els = {
   expensesTotal: document.querySelector("#expenses-total"),
   usersTable: document.querySelector("#users-table"),
   groupsList: document.querySelector("#groups-list"),
+  groupDetail: document.querySelector("#group-detail"),
   expensesTable: document.querySelector("#expenses-table"),
   settlementsList: document.querySelector("#settlements-list"),
   overviewSettlements: document.querySelector("#overview-settlements"),
@@ -77,6 +79,26 @@ function groupById(groupId) {
 
 function groupByName(name) {
   return state.groups.find((group) => group.name === name);
+}
+
+function expensesForGroup(group) {
+  if (!group) {
+    return [];
+  }
+
+  return state.expenses.filter((expense) => expense.group === group.name);
+}
+
+function settlementsForGroup(groupId) {
+  if (!groupId) {
+    return [];
+  }
+
+  return state.settlements[groupSettlementKey(groupId)] || [];
+}
+
+function totalForExpenses(expenses) {
+  return expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
 }
 
 function setApiStatus(kind, text) {
@@ -145,6 +167,17 @@ async function refreshData({ quiet = false } = {}) {
       state.selectedSettlementGroupId = "";
     }
 
+    if (
+      state.selectedGroupId &&
+      !state.groups.some((group) => group.id === state.selectedGroupId)
+    ) {
+      state.selectedGroupId = "";
+    }
+
+    if (!state.selectedGroupId && state.groups[0]) {
+      state.selectedGroupId = state.groups[0].id;
+    }
+
     if (!state.selectedSettlementGroupId && state.groups[0]) {
       state.selectedSettlementGroupId = state.groups[0].id;
     }
@@ -164,6 +197,7 @@ function render() {
   renderSettlementGroupOptions();
   renderUsersTable();
   renderGroups();
+  renderGroupDetail();
   renderExpenses();
   renderSettlements();
 }
@@ -278,28 +312,134 @@ function renderGroups() {
 
   els.groupsList.innerHTML = state.groups
     .map((group) => {
+      const isSelected = group.id === state.selectedGroupId;
       const members = (group.users || [])
         .map((name) => `<span class="chip">${escapeHtml(name)}</span>`)
         .join("");
 
       return `
-        <article class="record-card">
-          <header>
-            <div>
-              <h3>${escapeHtml(group.name)}</h3>
+        <article class="record-card group-card ${isSelected ? "is-selected" : ""}">
+          <button
+            class="group-card-button"
+            type="button"
+            data-select-group="${escapeHtml(group.id)}"
+            aria-pressed="${isSelected ? "true" : "false"}"
+            aria-label="Open ${escapeHtml(group.name)}"
+          >
+            <span class="group-card-main">
+              <strong class="group-card-name">${escapeHtml(group.name)}</strong>
               <small>${escapeHtml(group.id)}</small>
-            </div>
+            </span>
+            <span class="chip-row">${members}</span>
+            <span class="group-card-open" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="m9 18 6-6-6-6"></path>
+              </svg>
+            </span>
+          </button>
+          <div class="record-actions">
             <button class="danger-button" type="button" data-delete-group="${escapeHtml(
               group.id,
             )}" title="Delete group" aria-label="Delete ${escapeHtml(group.name)}">
               ${iconTrash()}
             </button>
-          </header>
-          <div class="chip-row">${members}</div>
+          </div>
         </article>
       `;
     })
     .join("");
+}
+
+function renderGroupDetail() {
+  if (!state.groups.length) {
+    els.groupDetail.innerHTML = `<div class="empty-state">No group selected</div>`;
+    return;
+  }
+
+  const group = groupById(state.selectedGroupId) || state.groups[0];
+  const members = group.users || [];
+  const expenses = expensesForGroup(group);
+  const settlements = settlementsForGroup(group.id);
+  const total = totalForExpenses(expenses);
+  const memberChips = members
+    .map((name) => `<span class="chip">${escapeHtml(name)}</span>`)
+    .join("");
+
+  els.groupDetail.innerHTML = `
+    <section class="group-detail-card">
+      <header class="group-detail-header">
+        <div>
+          <h3>${escapeHtml(group.name)}</h3>
+          <small>${escapeHtml(group.id)}</small>
+        </div>
+        <div class="group-detail-metrics">
+          <span><strong>${members.length}</strong> Members</span>
+          <span><strong>${expenses.length}</strong> Expenses</span>
+          <span><strong>${formatMoney(total)}</strong> Total</span>
+        </div>
+      </header>
+
+      <div class="group-detail-section">
+        <h4>Members</h4>
+        <div class="chip-row">${memberChips || `<span class="muted">No members</span>`}</div>
+      </div>
+
+      <div class="group-detail-section">
+        <h4>Expenses</h4>
+        ${groupExpensesMarkup(expenses)}
+      </div>
+
+      <div class="group-detail-section">
+        <h4>Balances</h4>
+        <div class="settlement-list">
+          ${
+            settlements.length
+              ? settlements
+                  .map(([debtor, creditor, amount]) =>
+                    settlementMarkup({ debtor, creditor, amount }),
+                  )
+                  .join("")
+              : `<div class="empty-state">No balances</div>`
+          }
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function groupExpensesMarkup(expenses) {
+  if (!expenses.length) {
+    return `<div class="empty-state">No expenses</div>`;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table class="compact-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Paid by</th>
+            <th>Split</th>
+            <th class="numeric">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${expenses
+            .map(
+              (expense) => `
+                <tr>
+                  <td><strong>${escapeHtml(expense.name)}</strong></td>
+                  <td>${escapeHtml(expense.payer)}</td>
+                  <td>${escapeHtml((expense.sharers || []).join(", "))}</td>
+                  <td class="numeric"><strong>${formatMoney(expense.amount)}</strong></td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function renderExpenses() {
@@ -436,13 +576,15 @@ async function createGroup(event) {
   setSubmitting(els.groupForm, true);
 
   try {
-    await request("/groups/", {
+    const savedGroup = await request("/groups/", {
       method: "POST",
       body: JSON.stringify({
         name: els.groupName.value.trim(),
         users: members,
       }),
     });
+    state.selectedGroupId = savedGroup.id;
+    state.selectedSettlementGroupId = savedGroup.id;
     els.groupForm.reset();
     await refreshData({ quiet: true });
     showToast("Group created");
@@ -509,6 +651,15 @@ async function deleteExpense(expenseId) {
   }
 }
 
+function selectGroup(groupId) {
+  state.selectedGroupId = groupId;
+  state.selectedSettlementGroupId = groupId;
+  renderGroups();
+  renderGroupDetail();
+  renderSettlementGroupOptions();
+  renderSettlements();
+}
+
 function setupTabs() {
   const tabs = Array.from(document.querySelectorAll("[role='tab']"));
   const panels = Array.from(document.querySelectorAll("[role='tabpanel']"));
@@ -542,6 +693,12 @@ function setupEvents() {
   });
 
   document.addEventListener("click", (event) => {
+    const selectButton = event.target.closest("[data-select-group]");
+    if (selectButton) {
+      selectGroup(selectButton.dataset.selectGroup);
+      return;
+    }
+
     const groupButton = event.target.closest("[data-delete-group]");
     if (groupButton) {
       deleteGroup(groupButton.dataset.deleteGroup);

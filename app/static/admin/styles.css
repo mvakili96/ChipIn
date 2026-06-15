@@ -491,6 +491,17 @@ tr:last-child td {
   gap: 12px;
 }
 
+.group-browser {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.82fr) minmax(0, 1.18fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.group-list {
+  grid-template-columns: 1fr;
+}
+
 .record-card {
   display: grid;
   gap: 14px;
@@ -499,6 +510,95 @@ tr:last-child td {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fbfcfb;
+}
+
+.group-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  padding: 0;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.group-card.is-selected {
+  border-color: var(--green);
+  box-shadow: 0 16px 38px rgba(36, 122, 90, 0.16);
+}
+
+.group-card-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  min-width: 0;
+  min-height: 136px;
+  border: 0;
+  border-radius: 8px 0 0 8px;
+  background: transparent;
+  color: inherit;
+  padding: 15px;
+  text-align: left;
+}
+
+.group-card-button:hover,
+.group-card-button:focus-visible {
+  outline: none;
+  background: var(--panel-soft);
+}
+
+.group-card-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.group-card-name {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.group-card-button .chip-row {
+  grid-column: 1 / -1;
+}
+
+.group-card-open {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--green-deep);
+  background: var(--panel);
+}
+
+.group-card-open svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+}
+
+.group-card.is-selected .group-card-open {
+  border-color: var(--green);
+  background: var(--green-deep);
+  color: #fff;
+}
+
+.group-card-main + .group-card-open {
+  align-self: start;
+}
+
+.record-actions {
+  display: grid;
+  align-content: start;
+  padding: 14px 14px 0 0;
 }
 
 .record-card header {
@@ -515,6 +615,7 @@ tr:last-child td {
 
 .record-card small {
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .chip-row {
@@ -569,6 +670,84 @@ tr:last-child td {
 
 .settlement-toolbar label {
   width: min(360px, 100%);
+}
+
+.group-detail {
+  min-width: 0;
+}
+
+.group-detail-card {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfb;
+  padding: 16px;
+}
+
+.group-detail-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.group-detail-header h3 {
+  margin: 0 0 4px;
+  font-size: 1.35rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.group-detail-header small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.group-detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(86px, 1fr));
+  gap: 8px;
+}
+
+.group-detail-metrics span {
+  display: grid;
+  gap: 4px;
+  min-height: 64px;
+  align-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  padding: 9px 10px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.group-detail-metrics strong {
+  color: var(--ink);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.group-detail-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.group-detail-section h4 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.compact-table {
+  min-width: 460px;
 }
 
 .settlement-list {
@@ -646,6 +825,10 @@ tr:last-child td {
   .split-grid {
     grid-template-columns: 1fr;
   }
+
+  .group-browser {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 780px) {
@@ -705,5 +888,22 @@ tr:last-child td {
 
   .settlement-item {
     grid-template-columns: 1fr;
+  }
+
+  .group-detail-header,
+  .group-detail-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .group-card {
+    grid-template-columns: 1fr;
+  }
+
+  .group-card-button {
+    border-radius: 8px 8px 0 0;
+  }
+
+  .record-actions {
+    padding: 0 14px 14px;
   }
 }
