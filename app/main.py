@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, redirect, send_from_directory, url_for
+from flask import Flask, jsonify, send_from_directory
 import redis
 import os
 import sys
@@ -42,26 +42,19 @@ def home():
                 "groups": "/groups",
                 "expenses": "/expenses",
                 "settlements": "/settlements",
-                "admin": "/admin",
+                "admin": "/admin/",
             },
         }
     )
 
 
-@app.route("/admin")
 @app.route("/admin/")
 def admin_panel():
     admin_dir = os.path.join(app.static_folder, "admin")
     return send_from_directory(admin_dir, "index.html")
 
 
-@app.route("/client")
-@app.route("/client/")
-def legacy_web_client():
-    return redirect(url_for("admin_panel"), code=308)
-
-
-@app.route("/test-redis")
+@app.route("/test-redis/")
 def test_redis():
     try:
         # Set a test value

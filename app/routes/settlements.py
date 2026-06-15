@@ -22,7 +22,7 @@ def get_groups_settlements():
     return jsonify(groups_settlements), 200
 
 
-@settlements_bp.route("/group/<group_id>", methods=["GET"])
+@settlements_bp.route("/group/<group_id>/", methods=["GET"])
 def get_group_settlements(group_id):
     def add_names_to_tx(tx: list[tuple], users: list[str]):
         return [(users[i], users[j], amt) for i, j, amt in tx]
@@ -46,7 +46,7 @@ def get_group_settlements(group_id):
     return jsonify({"settlements_this_group": add_names_to_tx(settlements, group_dict["users"])}), 200
 
 
-@settlements_bp.route("/user/<user_id>", methods=["GET"])
+@settlements_bp.route("/user/<user_id>/", methods=["GET"])
 def get_user_settlements(user_id):
     def add_names_to_tx(tx: list[tuple], users: list[str]):
         return [(users[i], users[j], amt) for i, j, amt in tx]

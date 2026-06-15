@@ -79,7 +79,7 @@ def get_expenses():
     return jsonify(expenses), 200
 
 
-@expenses_bp.route("/<expense_id>", methods=["GET"])
+@expenses_bp.route("/<expense_id>/", methods=["GET"])
 def get_expense(expense_id):
     expense = redis_service.get_expense(expense_id)
 
@@ -89,7 +89,7 @@ def get_expense(expense_id):
     return jsonify(expense), 200
 
 
-@expenses_bp.route("/<expense_id>/<key>", methods=["GET"])
+@expenses_bp.route("/<expense_id>/<key>/", methods=["GET"])
 def get_expense_attr(expense_id, key):
     attribute = redis_service.get_expense_attr(expense_id, key)
 
@@ -99,7 +99,7 @@ def get_expense_attr(expense_id, key):
     return jsonify(attribute), 200
 
 
-@expenses_bp.route("/<expense_id>", methods=["DELETE"])
+@expenses_bp.route("/<expense_id>/", methods=["DELETE"])
 def delete_expense(expense_id):
     success = redis_service.delete_expense(expense_id)
 
@@ -109,7 +109,7 @@ def delete_expense(expense_id):
     return jsonify({"message": f"Expense {expense_id} deleted successfully"}), 200
 
 
-@expenses_bp.route("/group/<group_id>", methods=["GET"])
+@expenses_bp.route("/group/<group_id>/", methods=["GET"])
 def get_group_expenses(group_id):
     group_dict  = redis_service.get_group(group_id)
     if not group_dict:
@@ -120,7 +120,7 @@ def get_group_expenses(group_id):
     return jsonify(group_expenses), 200
 
 
-@expenses_bp.route("/user/paid/<user_id>", methods=["GET"])
+@expenses_bp.route("/user/paid/<user_id>/", methods=["GET"])
 def get_user_paid_expenses(user_id):
     user_dict = redis_service.get_user(user_id)
     if not user_dict:

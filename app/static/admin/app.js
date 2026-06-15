@@ -668,7 +668,7 @@ async function createExpense(event) {
 
 async function deleteGroup(groupId) {
   try {
-    await request(`/groups/${encodeURIComponent(groupId)}`, { method: "DELETE" });
+    await request(`/groups/${encodeURIComponent(groupId)}/`, { method: "DELETE" });
     await refreshData({ quiet: true });
     showToast("Group deleted");
   } catch (error) {
@@ -678,7 +678,7 @@ async function deleteGroup(groupId) {
 
 async function deleteExpense(expenseId) {
   try {
-    await request(`/expenses/${encodeURIComponent(expenseId)}`, {
+    await request(`/expenses/${encodeURIComponent(expenseId)}/`, {
       method: "DELETE",
     });
     await refreshData({ quiet: true });

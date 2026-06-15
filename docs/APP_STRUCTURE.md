@@ -50,7 +50,7 @@ chipin/
   Builds the application image and installs Python dependencies.
 
 - `app/main.py`:
-  Flask entrypoint. Registers the `users`, `groups`, `expenses`, and `settlements` blueprints, serves the admin panel at `/admin`, and exposes a small health-style Redis test route.
+  Flask entrypoint. Registers the `users`, `groups`, `expenses`, and `settlements` blueprints, serves the admin panel at `/admin/`, and exposes a small health-style Redis test route.
 
 - `app/models/`:
   Domain objects and settlement logic.

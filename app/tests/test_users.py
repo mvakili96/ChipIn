@@ -70,7 +70,7 @@ def test_get_user(client):
     data = json.loads(response.data)
 
     # Get the user
-    response = client.get(f"/users/{data['id']}")
+    response = client.get(f"/users/{data['id']}/")
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data["name"] == "User 1"
@@ -79,11 +79,27 @@ def test_get_user(client):
     assert "created_at" in data
 
 
+def test_get_user_adds_trailing_slash(client):
+    """Test user detail URLs redirect to their trailing-slash form"""
+    response = client.post(
+        "/users/",
+        data=json.dumps({"name": "User 1", "email": "user1@example.com"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 201
+    data = json.loads(response.data)
+
+    response = client.get(f"/users/{data['id']}")
+
+    assert response.status_code == 308
+    assert response.headers["Location"].endswith(f"/users/{data['id']}/")
+
+
 def test_get_user_not_found(client):
     """Test getting a single user that does not exist"""
 
     # Get the user
-    response = client.get("/users/999")
+    response = client.get("/users/999/")
     assert response.status_code == 404
     data = json.loads(response.data)
     assert "error" in data
@@ -101,7 +117,7 @@ def test_get_user_names(client):
     data = json.loads(response.data)
 
     # Get the user's names
-    response = client.get("/users/user-names")
+    response = client.get("/users/user-names/")
     assert response.status_code == 200
     data = json.loads(response.data)
     assert type(data) is list
@@ -121,7 +137,7 @@ def test_get_user_attr(client):
 
     # Get the user's attributes
     for k in ["name", "email"]:
-        response = client.get(f"/users/{data['id']}/{k}")
+        response = client.get(f"/users/{data['id']}/{k}/")
         this_data = json.loads(response.data)
         assert response.status_code == 200
         assert this_data == data[k]
