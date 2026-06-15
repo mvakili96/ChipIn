@@ -70,7 +70,7 @@ chipin/
   Redis access layer. Handles JSON storage, search indexes, and query helpers for users, groups, expenses, and settlements.
 
 - `app/static/admin/`:
-  Static admin panel for creating people, groups, and expenses and viewing balances.
+  Static admin panel for creating users, groups, and expenses and viewing balances.
 
 - `app/tests/`:
   Pytest-based API tests using a mocked in-memory Redis service.

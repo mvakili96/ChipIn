@@ -32,7 +32,7 @@
         <aside class="sidebar" aria-label="Create records">
           <section class="tool-panel">
             <div class="section-heading">
-              <h2>Person</h2>
+              <h2>User</h2>
             </div>
             <form id="user-form" class="stacked-form">
               <label>
@@ -48,7 +48,7 @@
                   <path d="M12 5v14"/>
                   <path d="M5 12h14"/>
                 </svg>
-                Add Person
+                Add User
               </button>
             </form>
           </section>
@@ -64,7 +64,7 @@
               </label>
               <fieldset>
                 <legend>Members</legend>
-                <div id="group-users" class="check-list" data-empty="No people yet"></div>
+                <div id="group-users" class="check-list" data-empty="No users yet"></div>
               </fieldset>
               <button class="primary-action" type="submit">
                 <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -117,8 +117,8 @@
         <section class="main-panel" aria-label="ChipIn data">
           <div class="summary-grid" aria-label="Summary">
             <article class="metric-card">
-              <span>People</span>
-              <strong id="people-count">0</strong>
+              <span>Users</span>
+              <strong id="users-count">0</strong>
             </article>
             <article class="metric-card">
               <span>Groups</span>
@@ -129,8 +129,9 @@
               <strong id="expenses-count">0</strong>
             </article>
             <article class="metric-card">
-              <span>Total</span>
-              <strong id="expenses-total">$0.00</strong>
+              <span>Avg Expenses / Group</span>
+              <strong id="average-expenses-group">0</strong>
+              <small id="average-expenses-user">0 / user</small>
             </article>
           </div>
 
@@ -145,7 +146,7 @@
             <div class="split-grid">
               <section class="data-panel">
                 <div class="section-heading">
-                  <h2>People</h2>
+                  <h2>Users</h2>
                 </div>
                 <div class="table-wrap">
                   <table>
@@ -166,9 +167,9 @@
                 <div id="overview-settlements" class="settlement-list"></div>
                 <div class="overview-balance-block">
                   <div class="section-heading">
-                    <h2>Person Totals</h2>
+                    <h2>User Totals</h2>
                   </div>
-                  <div id="overview-person-balances" class="person-balance-list"></div>
+                  <div id="overview-user-balances" class="user-balance-list"></div>
                 </div>
               </section>
             </div>

@@ -26,17 +26,18 @@ const els = {
   expensePayer: document.querySelector("#expense-payer"),
   expenseSharers: document.querySelector("#expense-sharers"),
   settlementGroup: document.querySelector("#settlement-group"),
-  peopleCount: document.querySelector("#people-count"),
+  usersCount: document.querySelector("#users-count"),
   groupsCount: document.querySelector("#groups-count"),
   expensesCount: document.querySelector("#expenses-count"),
-  expensesTotal: document.querySelector("#expenses-total"),
+  averageExpensesGroup: document.querySelector("#average-expenses-group"),
+  averageExpensesUser: document.querySelector("#average-expenses-user"),
   usersTable: document.querySelector("#users-table"),
   groupsList: document.querySelector("#groups-list"),
   groupDetail: document.querySelector("#group-detail"),
   expensesTable: document.querySelector("#expenses-table"),
   settlementsList: document.querySelector("#settlements-list"),
   overviewSettlements: document.querySelector("#overview-settlements"),
-  overviewPersonBalances: document.querySelector("#overview-person-balances"),
+  overviewUserBalances: document.querySelector("#overview-user-balances"),
 };
 
 const currency = new Intl.NumberFormat("en-US", {
@@ -59,6 +60,13 @@ function iconTrash() {
 function formatMoney(value) {
   const amount = Number(value) || 0;
   return currency.format(amount);
+}
+
+function formatAverageCount(value) {
+  const amount = Number(value) || 0;
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 1,
+  }).format(amount);
 }
 
 function escapeHtml(value) {
@@ -204,15 +212,18 @@ function render() {
 }
 
 function renderSummary() {
-  const total = state.expenses.reduce(
-    (sum, expense) => sum + Number(expense.amount || 0),
-    0,
-  );
+  const averageGroup = state.groups.length
+    ? state.expenses.length / state.groups.length
+    : 0;
+  const averageUser = state.users.length
+    ? state.expenses.length / state.users.length
+    : 0;
 
-  els.peopleCount.textContent = String(state.users.length);
+  els.usersCount.textContent = String(state.users.length);
   els.groupsCount.textContent = String(state.groups.length);
   els.expensesCount.textContent = String(state.expenses.length);
-  els.expensesTotal.textContent = formatMoney(total);
+  els.averageExpensesGroup.textContent = formatAverageCount(averageGroup);
+  els.averageExpensesUser.textContent = `${formatAverageCount(averageUser)} / user`;
 }
 
 function renderUserOptions() {
@@ -239,10 +250,10 @@ function renderExpenseGroupOptions() {
     : `<option value="">No groups</option>`;
 
   els.expenseGroup.disabled = state.groups.length === 0;
-  updateExpensePeople();
+  updateExpenseUsers();
 }
 
-function updateExpensePeople() {
+function updateExpenseUsers() {
   const group = groupByName(els.expenseGroup.value);
   const members = group ? group.users || [] : [];
 
@@ -287,7 +298,7 @@ function renderUsersTable() {
   if (!state.users.length) {
     els.usersTable.innerHTML = `
       <tr>
-        <td colspan="2"><div class="empty-state">No people</div></td>
+        <td colspan="2"><div class="empty-state">No users</div></td>
       </tr>
     `;
     return;
@@ -489,7 +500,7 @@ function allNamedSettlements() {
   }, []);
 }
 
-function aggregatedPersonBalances() {
+function aggregatedUserBalances() {
   const balances = new Map();
 
   state.users.forEach((user) => {
@@ -514,7 +525,7 @@ function renderSettlements() {
     : "";
   const settlements = state.settlements[selectedKey] || [];
   const allSettlements = allNamedSettlements();
-  const personBalances = aggregatedPersonBalances();
+  const userBalances = aggregatedUserBalances();
 
   els.settlementsList.innerHTML = settlements.length
     ? settlements
@@ -533,9 +544,9 @@ function renderSettlements() {
     ? allSettlements.slice(0, 6).map(settlementMarkup).join("")
     : `<div class="empty-state">No balances</div>`;
 
-  els.overviewPersonBalances.innerHTML = personBalances.length
-    ? personBalances.map(personBalanceMarkup).join("")
-    : `<div class="empty-state">No people</div>`;
+  els.overviewUserBalances.innerHTML = userBalances.length
+    ? userBalances.map(userBalanceMarkup).join("")
+    : `<div class="empty-state">No users</div>`;
 }
 
 function settlementMarkup({ debtor, creditor, amount, groupName }) {
@@ -552,13 +563,13 @@ function settlementMarkup({ debtor, creditor, amount, groupName }) {
   `;
 }
 
-function personBalanceMarkup({ name, balance }) {
+function userBalanceMarkup({ name, balance }) {
   const isSettled = Math.abs(balance) < 0.005;
   const kind = isSettled ? "settled" : balance > 0 ? "owed" : "owes";
   const label = isSettled ? "settled" : balance > 0 ? "gets back" : "owes";
 
   return `
-    <article class="person-balance-item" data-kind="${kind}">
+    <article class="user-balance-item" data-kind="${kind}">
       <span><strong>${escapeHtml(name)}</strong> ${label}</span>
       <b>${isSettled ? formatMoney(0) : formatMoney(Math.abs(balance))}</b>
     </article>
@@ -586,7 +597,7 @@ async function createUser(event) {
     });
     els.userForm.reset();
     await refreshData({ quiet: true });
-    showToast("Person added");
+    showToast("User added");
   } catch (error) {
     showToast(error.message, "error");
   } finally {
@@ -718,7 +729,7 @@ function setupEvents() {
   els.userForm.addEventListener("submit", createUser);
   els.groupForm.addEventListener("submit", createGroup);
   els.expenseForm.addEventListener("submit", createExpense);
-  els.expenseGroup.addEventListener("change", updateExpensePeople);
+  els.expenseGroup.addEventListener("change", updateExpenseUsers);
   els.settlementGroup.addEventListener("change", (event) => {
     state.selectedSettlementGroupId = event.target.value;
     renderSettlements();

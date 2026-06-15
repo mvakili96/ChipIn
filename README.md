@@ -53,7 +53,7 @@ The API currently supports:
 
 - `admin panel`
   - create users, groups, and expenses from the browser
-  - view people, groups, expenses, and settlements
+  - view users, groups, expenses, and settlements
 
 ## Tech Stack
 
