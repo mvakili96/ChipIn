@@ -3,6 +3,13 @@
 ## Docker Compose
 docker compose up --build
 
+## Admin Panel
+Open the admin panel after Docker Compose starts:
+
+```bash
+http://localhost/admin/
+```
+
 ## User Commands
 In order to add a user:
 ```bash
@@ -20,13 +27,13 @@ it returns a list of Dictionaries containing the users' information.
 
 To get a user:
 ```bash
-curl -s http://localhost/users/<user_id>
+curl -s http://localhost/users/<user_id>/
 ```
 it returns a Dictionary containing the user's information.
 
 To get an attribute of a user:
 ```bash
-curl -s http://localhost/users/<user_id>/<key>
+curl -s http://localhost/users/<user_id>/<key>/
 ```
 where key is an attribute like the name, email, and so on.
 
@@ -47,19 +54,19 @@ it returns a list of Dictionaries containing the groups' information.
 
 To get a group:
 ```bash
-curl -s http://localhost/groups/<group_id>
+curl -s http://localhost/groups/<group_id>/
 ```
 it returns a Dictionary containing the group's information.
 
 To get an attribute of a group:
 ```bash
-curl -s http://localhost/groups/<group_id>/<key>
+curl -s http://localhost/groups/<group_id>/<key>/
 ```
 where key is an attribute like the name, users, and so on.
 
 To delete a group:
 ```bash
-curl -X DELETE http://localhost/groups/<group_id>
+curl -X DELETE http://localhost/groups/<group_id>/
 ```
 it deletes the entire group, its corresponding expenses, and all associated settlements from the database.
 
@@ -80,31 +87,31 @@ it returns a list of Dictionaries containing the expenses' information.
 
 To get an expense:
 ```bash
-curl -s http://localhost/expenses/<expense_id>
+curl -s http://localhost/expenses/<expense_id>/
 ```
 it returns a Dictionary containing the expense's information.
 
 To get an attribute of an expense:
 ```bash
-curl -s http://localhost/expenses/<expense_id>/<key>
+curl -s http://localhost/expenses/<expense_id>/<key>/
 ```
 where key is an attribute like the name, payer, and so on.
 
 To delete an expense:
 ```bash
-curl -X DELETE http://localhost/expenses/<expense_id>
+curl -X DELETE http://localhost/expenses/<expense_id>/
 ```
 it deletes the entire expense from database followed by updating settlements.
 
 To get the expenses of a group:
 ```bash
-curl -s http://localhost/expenses/group/<group_id>
+curl -s http://localhost/expenses/group/<group_id>/
 ```
 it returns a list of Dictionaries containing each expense's information. 
 
 To get all the expenses paid by a user within all groups:
 ```bash
-curl -s http://localhost/expenses/user/paid/<user_id>
+curl -s http://localhost/expenses/user/paid/<user_id>/
 ```
 it returns a list of Dictionaries containing each expense whose payer is the user with the given ID.
 
@@ -117,13 +124,13 @@ it returns a Dictionary where each value is a list that represents the settlemen
 
 To get the settlements of a group:
 ```bash
-curl -s http://localhost/settlements/group/<group_id>
+curl -s http://localhost/settlements/group/<group_id>/
 ```
 it returns a list of settlements where each settlement is a list of 3 elements. First element is the debtor, second is the creditor, and the third is the amount of money. 
 
 To get the settlements involving a user:
 ```bash
-curl -s http://localhost/settlements/user/<user_id>
+curl -s http://localhost/settlements/user/<user_id>/
 ```
 it returns a list of settlements where the user is either the debtor or the creditor. The format is the same 3-element settlement format already used for groups.
 

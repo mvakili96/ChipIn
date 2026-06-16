@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">ChipIn mark</title>
+  <desc id="desc">Three rounded payment chips grouped together.</desc>
+  <rect width="64" height="64" rx="16" fill="#14332c"/>
+  <rect x="13" y="18" width="27" height="18" rx="7" fill="#4fb286"/>
+  <rect x="24" y="28" width="27" height="18" rx="7" fill="#f3b63f"/>
+  <rect x="16" y="38" width="27" height="18" rx="7" fill="#ef8354"/>
+  <circle cx="26.5" cy="27" r="3" fill="#f8faf8"/>
+  <circle cx="37.5" cy="37" r="3" fill="#14332c"/>
+  <circle cx="29.5" cy="47" r="3" fill="#14332c"/>
+</svg>

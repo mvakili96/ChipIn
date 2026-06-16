@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ChipIn Admin</title>
+    <link rel="icon" href="/static/admin/chipin-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/admin/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/admin/" aria-label="ChipIn admin">
+          <img src="/static/admin/chipin-mark.svg" alt="" width="40" height="40">
+          <span>
+            <strong>ChipIn</strong>
+            <small>Admin panel</small>
+          </span>
+        </a>
+        <div class="topbar-actions">
+          <span class="status-pill" id="api-status" data-state="loading">Checking API</span>
+          <button class="icon-button" id="refresh-button" type="button" title="Refresh data" aria-label="Refresh data">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M20 12a8 8 0 1 1-2.34-5.66"/>
+              <path d="M20 4v6h-6"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="sidebar" aria-label="Create records">
+          <section class="tool-panel">
+            <div class="section-heading">
+              <h2>User</h2>
+            </div>
+            <form id="user-form" class="stacked-form">
+              <label>
+                <span>Name</span>
+                <input id="user-name" name="name" autocomplete="name" required>
+              </label>
+              <label>
+                <span>Email</span>
+                <input id="user-email" name="email" type="email" autocomplete="email" required>
+              </label>
+              <button class="primary-action" type="submit">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 5v14"/>
+                  <path d="M5 12h14"/>
+                </svg>
+                Add User
+              </button>
+            </form>
+          </section>
+
+          <section class="tool-panel">
+            <div class="section-heading">
+              <h2>Group</h2>
+            </div>
+            <form id="group-form" class="stacked-form">
+              <label>
+                <span>Name</span>
+                <input id="group-name" name="name" required>
+              </label>
+              <fieldset>
+                <legend>Members</legend>
+                <div id="group-users" class="check-list" data-empty="No users yet"></div>
+              </fieldset>
+              <button class="primary-action" type="submit">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 5v14"/>
+                  <path d="M5 12h14"/>
+                </svg>
+                Create Group
+              </button>
+            </form>
+          </section>
+
+          <section class="tool-panel">
+            <div class="section-heading">
+              <h2>Expense</h2>
+            </div>
+            <form id="expense-form" class="stacked-form">
+              <label>
+                <span>Name</span>
+                <input id="expense-name" name="name" required>
+              </label>
+              <div class="form-row">
+                <label>
+                  <span>Amount</span>
+                  <input id="expense-amount" name="amount" type="number" step="0.01" min="0.01" inputmode="decimal" required>
+                </label>
+                <label>
+                  <span>Group</span>
+                  <select id="expense-group" name="group" required></select>
+                </label>
+              </div>
+              <label>
+                <span>Paid by</span>
+                <select id="expense-payer" name="payer" required></select>
+              </label>
+              <fieldset>
+                <legend>Split with</legend>
+                <div id="expense-sharers" class="check-list" data-empty="Select a group"></div>
+              </fieldset>
+              <button class="primary-action" type="submit">
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 5v14"/>
+                  <path d="M5 12h14"/>
+                </svg>
+                Add Expense
+              </button>
+            </form>
+          </section>
+        </aside>
+
+        <section class="main-panel" aria-label="ChipIn data">
+          <div class="summary-grid" aria-label="Summary">
+            <article class="metric-card">
+              <span>Users</span>
+              <strong id="users-count">0</strong>
+            </article>
+            <article class="metric-card">
+              <span>Groups</span>
+              <strong id="groups-count">0</strong>
+            </article>
+            <article class="metric-card">
+              <span>Expenses</span>
+              <strong id="expenses-count">0</strong>
+            </article>
+            <article class="metric-card">
+              <span>Avg Expenses / Group</span>
+              <strong id="average-expenses-group">0</strong>
+              <small id="average-expenses-user">0 / user</small>
+            </article>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="Data views">
+            <button id="tab-overview" class="tab is-active" type="button" role="tab" aria-controls="panel-overview" aria-selected="true">Overview</button>
+            <button id="tab-users" class="tab" type="button" role="tab" aria-controls="panel-users" aria-selected="false">Users</button>
+            <button id="tab-groups" class="tab" type="button" role="tab" aria-controls="panel-groups" aria-selected="false">Groups</button>
+            <button id="tab-expenses" class="tab" type="button" role="tab" aria-controls="panel-expenses" aria-selected="false">Expenses</button>
+            <button id="tab-settlements" class="tab" type="button" role="tab" aria-controls="panel-settlements" aria-selected="false">Settlements</button>
+          </div>
+
+          <section id="panel-overview" class="tab-panel is-active" role="tabpanel" aria-labelledby="tab-overview">
+            <div class="split-grid">
+              <section class="data-panel">
+                <div class="section-heading">
+                  <h2>Users</h2>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                      </tr>
+                    </thead>
+                    <tbody id="users-table"></tbody>
+                  </table>
+                </div>
+              </section>
+              <section class="data-panel">
+                <div class="section-heading">
+                  <h2>Recent Balances</h2>
+                </div>
+                <div id="overview-settlements" class="settlement-list"></div>
+                <div class="overview-balance-block">
+                  <div class="section-heading">
+                    <h2>User Totals</h2>
+                  </div>
+                  <div id="overview-user-balances" class="user-balance-list"></div>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section id="panel-users" class="tab-panel" role="tabpanel" aria-labelledby="tab-users" hidden>
+            <div class="data-panel">
+              <div class="section-heading">
+                <h2>Users</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>ID</th>
+                    </tr>
+                  </thead>
+                  <tbody id="users-manage-table"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="panel-groups" class="tab-panel" role="tabpanel" aria-labelledby="tab-groups" hidden>
+            <div class="data-panel">
+              <div class="section-heading">
+                <h2>Groups</h2>
+              </div>
+              <div class="group-browser">
+                <div id="groups-list" class="record-grid group-list"></div>
+                <div id="group-detail" class="group-detail"></div>
+              </div>
+            </div>
+          </section>
+
+          <section id="panel-expenses" class="tab-panel" role="tabpanel" aria-labelledby="tab-expenses" hidden>
+            <div class="data-panel">
+              <div class="section-heading">
+                <h2>Expenses</h2>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Group</th>
+                      <th>Paid by</th>
+                      <th>Split</th>
+                      <th class="numeric">Amount</th>
+                      <th class="action-cell">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="expenses-table"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="panel-settlements" class="tab-panel" role="tabpanel" aria-labelledby="tab-settlements" hidden>
+            <div class="settlement-toolbar">
+              <label>
+                <span>Group</span>
+                <select id="settlement-group"></select>
+              </label>
+            </div>
+            <div class="data-panel">
+              <div class="section-heading">
+                <h2>Balances</h2>
+              </div>
+              <div id="settlements-list" class="settlement-list"></div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="/static/admin/app.js" defer></script>
+  </body>
+</html>

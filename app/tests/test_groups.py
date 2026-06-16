@@ -186,7 +186,7 @@ def test_get_group(client):
     data = json.loads(response.data)
 
     # Get the group
-    response = client.get(f"/groups/{data['id']}")
+    response = client.get(f"/groups/{data['id']}/")
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data["name"] == "Calgary"
@@ -195,11 +195,39 @@ def test_get_group(client):
     assert "created_at" in data
 
 
+def test_get_group_adds_trailing_slash(client):
+    """Test group detail URLs redirect to their trailing-slash form"""
+    # Create 2 users
+    client.post(
+        "/users/",
+        data=json.dumps({"name": "agha vakili", "email": "mjvk@example.com"}),
+        content_type="application/json",
+    )
+    client.post(
+        "/users/",
+        data=json.dumps({"name": "Moein", "email": "moe@example.com"}),
+        content_type="application/json",
+    )
+
+    response = client.post(
+        "/groups/",
+        data=json.dumps({"name": "Calgary", "users": ["agha vakili", "Moein"]}),
+        content_type="application/json",
+    )
+    assert response.status_code == 201
+    data = json.loads(response.data)
+
+    response = client.get(f"/groups/{data['id']}")
+
+    assert response.status_code == 308
+    assert response.headers["Location"].endswith(f"/groups/{data['id']}/")
+
+
 def test_get_group_not_found(client):
     """Test getting a single group that does not exist"""
 
     # Get the group
-    response = client.get("/groups/999")
+    response = client.get("/groups/999/")
     assert response.status_code == 404
     data = json.loads(response.data)
     assert "error" in data
@@ -230,7 +258,7 @@ def test_get_group_attr(client):
 
     # Get the group's attributes
     for k in ["name", "users"]:
-        response = client.get(f"/groups/{data['id']}/{k}")
+        response = client.get(f"/groups/{data['id']}/{k}/")
         assert response.status_code == 200
 
         this_data = response.get_json()

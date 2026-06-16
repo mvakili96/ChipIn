@@ -33,7 +33,7 @@ def get_groups():
     return jsonify(groups), 200
 
 
-@groups_bp.route("/<group_id>", methods=["GET"])
+@groups_bp.route("/<group_id>/", methods=["GET"])
 def get_group(group_id):
     group = redis_service.get_group(group_id)
 
@@ -43,7 +43,7 @@ def get_group(group_id):
     return jsonify(group), 200
 
 
-@groups_bp.route("/<group_id>/<key>", methods=["GET"])
+@groups_bp.route("/<group_id>/<key>/", methods=["GET"])
 def get_group_attr(group_id, key):
     attribute = redis_service.get_group_attr(group_id, key)
 
@@ -53,7 +53,7 @@ def get_group_attr(group_id, key):
     return jsonify(attribute), 200
 
 
-@groups_bp.route("/<group_id>", methods=["DELETE"])
+@groups_bp.route("/<group_id>/", methods=["DELETE"])
 def delete_group(group_id):
     success = redis_service.delete_group(group_id)
 
