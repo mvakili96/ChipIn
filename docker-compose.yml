@@ -28,6 +28,10 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=mypassword
       - REBUILD_INDEXES=1
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET:-}
+      - TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
     depends_on:
       - redis
     networks:
