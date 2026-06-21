@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ChipIn</title>
+    <link rel="stylesheet" href="/static/telegram/styles.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <img src="/static/admin/chipin-mark.svg" alt="" class="brand-mark">
+          <div>
+            <p>ChipIn</p>
+            <h1>Client</h1>
+          </div>
+        </div>
+        <span id="user-pill" class="user-pill"></span>
+      </header>
+
+      <main>
+        <section id="status" class="status" data-state="loading">Loading</section>
+
+        <section id="dashboard" class="dashboard" hidden>
+          <div class="metrics">
+            <div>
+              <span id="groups-count">0</span>
+              <p>Groups</p>
+            </div>
+            <div>
+              <span id="net-balance">$0.00</span>
+              <p>Net Balance</p>
+            </div>
+          </div>
+
+          <section class="section">
+            <div class="section-title">
+              <h2>Balances</h2>
+            </div>
+            <div id="balances-list" class="list"></div>
+          </section>
+
+          <section class="section">
+            <div class="section-title">
+              <h2>Groups</h2>
+            </div>
+            <div id="groups-list" class="group-list"></div>
+          </section>
+
+          <section id="group-detail" class="section detail-section" hidden></section>
+        </section>
+      </main>
+
+      <div id="toast" class="toast" role="status"></div>
+    </div>
+
+    <script src="/static/telegram/app.js"></script>
+  </body>
+</html>
