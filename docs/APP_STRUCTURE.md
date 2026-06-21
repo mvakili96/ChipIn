@@ -20,20 +20,27 @@ chipin/
 │   │   ├── expenses.py
 │   │   ├── groups.py
 │   │   ├── settlements.py
+│   │   ├── telegram.py
 │   │   └── users.py
 │   ├── services/
-│   │   └── redis_service.py
+│   │   ├── redis_service.py
+│   │   ├── telegram_auth.py
+│   │   └── telegram_bot.py
 │   ├── static/
-│   │   └── admin/
+│   │   ├── admin/
+│   │   │   ├── app.js
+│   │   │   ├── chipin-mark.svg
+│   │   │   ├── index.html
+│   │   │   └── styles.css
+│   │   └── telegram/
 │   │       ├── app.js
-│   │       ├── chipin-mark.svg
 │   │       ├── index.html
 │   │       └── styles.css
 │   └── tests/
 │       ├── test_admin.py
 │       ├── conftest.py
-│       ├── test_expenses.py
 │       ├── test_groups.py
+│       ├── test_telegram.py
 │       └── test_users.py
 └── docs/
     ├── APP_STRUCTURE.md
@@ -50,7 +57,7 @@ chipin/
   Builds the application image and installs Python dependencies.
 
 - `app/main.py`:
-  Flask entrypoint. Registers the `users`, `groups`, `expenses`, and `settlements` blueprints, serves the admin panel at `/admin/`, and exposes a small health-style Redis test route.
+  Flask entrypoint. Registers the `users`, `groups`, `expenses`, `settlements`, and `telegram` blueprints, serves the admin panel at `/admin/`, serves the Telegram Mini App at `/telegram/`, and exposes a small health-style Redis test route.
 
 - `app/models/`:
   Domain objects and settlement logic.
@@ -65,12 +72,22 @@ chipin/
   - `groups.py`: create, fetch, and delete groups
   - `expenses.py`: create, fetch, and delete expenses; fetch expenses by group and by payer
   - `settlements.py`: fetch settlements by group, across all groups, and by user involvement
+  - `telegram.py`: Telegram Mini App auth/client API routes and bot webhook handling
 
 - `app/services/redis_service.py`:
   Redis access layer. Handles JSON storage, search indexes, and query helpers for users, groups, expenses, and settlements.
 
+- `app/services/telegram_auth.py`:
+  Validates Telegram Mini App `initData` before the client API trusts a Telegram identity.
+
+- `app/services/telegram_bot.py`:
+  Minimal Telegram Bot API client used by the webhook route to send Mini App buttons and balance replies.
+
 - `app/static/admin/`:
   Static admin panel for creating and viewing users, creating groups and expenses, and viewing balances.
+
+- `app/static/telegram/`:
+  Static Telegram Mini App client for user-facing groups, expenses, balances, and settlements.
 
 - `app/tests/`:
   Pytest-based API tests using a mocked in-memory Redis service.
@@ -78,7 +95,7 @@ chipin/
   - `conftest.py`: shared fixtures and mock service
   - `test_users.py`: user route tests
   - `test_groups.py`: group route tests
-  - `test_expenses.py`: expense route tests
+  - `test_telegram.py`: Telegram auth, Mini App route, group linking, expense creation, and webhook tests
 
 - `app/requirements.txt`:
   Python dependencies for the app and tests.
