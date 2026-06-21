@@ -1,6 +1,7 @@
 import pytest
 import sys
 import os
+import json
 
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -55,8 +56,11 @@ class MockRedisService:
 
     def delete_group(self, group_id):
         key = f"group:{group_id}"
+        if key not in self.data:
+            return False
+
         self.data.pop(key)
-        return key not in self.data.keys()
+        return True
 
 
 @pytest.fixture
@@ -72,12 +76,50 @@ def client(app):
     return app.test_client()
 
 
+@pytest.fixture
+def create_user(client):
+    """Create a user through the API and return the JSON response."""
+
+    def _create_user(name="User 1", email="user1@example.com"):
+        response = client.post(
+            "/users/",
+            data=json.dumps({"name": name, "email": email}),
+            content_type="application/json",
+        )
+        assert response.status_code == 201
+        return response.get_json()
+
+    return _create_user
+
+
+@pytest.fixture
+def create_group(client, create_user):
+    """Create a group through the API and return the JSON response."""
+
+    def _create_group(name="Group 1", users=None):
+        members = users or ["User 1", "User 2"]
+        for index, member_name in enumerate(members, start=1):
+            create_user(name=member_name, email=f"user{index}@example.com")
+
+        response = client.post(
+            "/groups/",
+            data=json.dumps({"name": name, "users": members}),
+            content_type="application/json",
+        )
+        assert response.status_code == 201
+        return response.get_json()
+
+    return _create_group
+
+
 @pytest.fixture(autouse=True)
 def mock_redis_service(monkeypatch):
     """Replace redis_service with mock for all tests"""
     import services.redis_service as redis_module
     import routes.users as users_module
     import routes.groups as groups_module
+    import routes.expenses as expenses_module
+    import routes.settlements as settlements_module
 
     mock_service = MockRedisService()
 
@@ -85,6 +127,8 @@ def mock_redis_service(monkeypatch):
     monkeypatch.setattr(redis_module, "redis_service", mock_service)
     monkeypatch.setattr(users_module, "redis_service", mock_service)
     monkeypatch.setattr(groups_module, "redis_service", mock_service)
+    monkeypatch.setattr(expenses_module, "redis_service", mock_service)
+    monkeypatch.setattr(settlements_module, "redis_service", mock_service)
 
     yield mock_service
 
