@@ -1,5 +1,6 @@
 import html
 import os
+from datetime import datetime
 from typing import Any
 from urllib.parse import urlencode
 
@@ -164,6 +165,162 @@ def create_telegram_expense():
     ), 201
 
 
+@telegram_bp.route("/api/expenses/<expense_id>/", methods=["PUT"])
+def update_telegram_expense(expense_id):
+    launch, error_response = _require_telegram_user()
+    if error_response:
+        return error_response
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request: invalid JSON"}), 400
+
+    expense = redis_service.get_expense(expense_id)
+    if not expense:
+        return jsonify({"error": "Expense not found"}), 404
+
+    group, error_response = _expense_access_group(
+        launch.user,
+        expense,
+        require_payer=True,
+    )
+    if error_response:
+        return error_response
+
+    if "name" in data:
+        expense_name = str(data["name"]).strip()
+        if not expense_name:
+            return jsonify({"error": "Expense name is required"}), 400
+        expense["name"] = expense_name
+
+    if "amount" in data:
+        try:
+            amount = float(data["amount"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "Amount must be a number"}), 400
+        if amount <= 0:
+            return jsonify({"error": "Amount must be greater than zero"}), 400
+        expense["amount"] = amount
+
+    if "sharers" in data:
+        group_users = group.get("users") or []
+        sharers = data.get("sharers")
+        if not isinstance(sharers, list) or not sharers:
+            return jsonify({"error": "Sharers must be a non-empty list"}), 400
+        for name in sharers:
+            if name not in group_users:
+                return jsonify({"error": "One or more sharers are not in this group"}), 404
+        expense["sharers"] = sharers
+
+    expense["updated_at"] = _now_iso()
+    saved_expense = redis_service.save_expense(expense)
+    settlements = _save_recomputed_group_settlements(group)
+
+    return jsonify(
+        {
+            "saved_expense": saved_expense,
+            "group_settlement": _named_settlements(
+                settlements,
+                group.get("users") or [],
+            ),
+            "detail": _group_detail_payload(group),
+        }
+    ), 200
+
+
+@telegram_bp.route("/api/expenses/<expense_id>/", methods=["DELETE"])
+def delete_telegram_expense(expense_id):
+    launch, error_response = _require_telegram_user()
+    if error_response:
+        return error_response
+
+    expense = redis_service.get_expense(expense_id)
+    if not expense:
+        return jsonify({"error": "Expense not found"}), 404
+
+    group, error_response = _expense_access_group(
+        launch.user,
+        expense,
+        require_payer=True,
+    )
+    if error_response:
+        return error_response
+
+    redis_service.delete_expense_record(expense_id)
+    settlements = _save_recomputed_group_settlements(group)
+
+    return jsonify(
+        {
+            "message": f"Expense {expense_id} deleted successfully",
+            "group_settlement": _named_settlements(
+                settlements,
+                group.get("users") or [],
+            ),
+            "detail": _group_detail_payload(group),
+        }
+    ), 200
+
+
+@telegram_bp.route("/api/groups/<group_id>/settlements/paid/", methods=["POST"])
+def mark_telegram_settlement_paid(group_id):
+    launch, error_response = _require_telegram_user()
+    if error_response:
+        return error_response
+
+    group = redis_service.get_group(group_id)
+    if not group:
+        return jsonify({"error": "Group not found"}), 404
+
+    group_users = group.get("users") or []
+    if launch.user["name"] not in group_users:
+        return jsonify({"error": "You are not a member of this group"}), 403
+
+    data = request.get_json(silent=True) or {}
+    for field in ["debtor", "creditor", "amount"]:
+        if field not in data:
+            return jsonify({"error": f"Invalid request: missing {field}"}), 400
+
+    debtor = data["debtor"]
+    creditor = data["creditor"]
+    if debtor not in group_users or creditor not in group_users:
+        return jsonify({"error": "Settlement users must be group members"}), 400
+
+    if launch.user["name"] not in {debtor, creditor}:
+        return jsonify({"error": "Only settlement participants can mark it paid"}), 403
+
+    try:
+        amount = float(data["amount"])
+    except (TypeError, ValueError):
+        return jsonify({"error": "Amount must be a number"}), 400
+    if amount <= 0:
+        return jsonify({"error": "Amount must be greater than zero"}), 400
+
+    open_amount = _open_settlement_amount(group, debtor, creditor)
+    if open_amount is None:
+        return jsonify({"error": "Settlement is not open"}), 400
+    if amount - open_amount > 0.005:
+        return jsonify({"error": "Payment amount exceeds the open settlement"}), 400
+
+    payment = redis_service.save_settlement_payment(
+        group_id,
+        {
+            "debtor": debtor,
+            "creditor": creditor,
+            "amount": amount,
+            "recorded_by": launch.user["name"],
+        },
+    )
+    settlements = _save_recomputed_group_settlements(group)
+
+    return jsonify(
+        {
+            "payment": payment,
+            "group_settlement": _named_settlements(settlements, group_users),
+            "detail": _group_detail_payload(group),
+        }
+    ), 201
+
+
 @telegram_bp.route("/api/settlements/", methods=["GET"])
 def get_my_settlements():
     launch, error_response = _require_telegram_user()
@@ -256,6 +413,7 @@ def _group_payload(group: dict[str, Any] | None) -> dict[str, Any] | None:
         "telegram_chat_id": group.get("telegram_chat_id"),
         "telegram_chat_title": group.get("telegram_chat_title"),
         "telegram_chat_type": group.get("telegram_chat_type"),
+        "private_chat_url": _private_chat_url(group.get("id")),
         "expenses_count": len(expenses),
         "created_at": group.get("created_at"),
     }
@@ -263,15 +421,14 @@ def _group_payload(group: dict[str, Any] | None) -> dict[str, Any] | None:
 
 def _group_detail_payload(group: dict[str, Any]) -> dict[str, Any]:
     expenses = redis_service.get_group_expenses(group["id"])
-    settlements = redis_service.get_group_settlements(group["id"]) or []
-
-    if not settlements and expenses:
-        settlements = Settlement(expenses, group.get("users") or [])
+    settlements = _calculate_group_settlements(group)
+    payments = redis_service.get_group_settlement_payments(group["id"])
 
     return {
         "group": _group_payload(group),
         "expenses": expenses,
         "settlements": _named_settlements(settlements, group.get("users") or []),
+        "payment_history": payments,
     }
 
 
@@ -287,23 +444,114 @@ def _public_user(user: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _save_updated_group_settlements(group: dict[str, Any], expense: Expense) -> list[list]:
-    group_users = group.get("users") or []
-    tx_prev = redis_service.get_group_settlements(group["id"])
+def _save_updated_group_settlements(
+    group: dict[str, Any],
+    _expense: Expense,
+) -> list[list]:
+    return _save_recomputed_group_settlements(group)
 
-    tx_hist: list[tuple] | None = None
-    if tx_prev is not None:
-        tx_hist = [tuple(x) for x in tx_prev]
 
-    if tx_hist is None:
-        group_expenses = redis_service.get_group_expenses(group["id"])
-        tx = Settlement(group_expenses, group_users)
-    else:
-        tx = Settlement([expense.to_dict()], group_users, tx_hist)
-
-    tx_json = [list(t) for t in tx]
+def _save_recomputed_group_settlements(group: dict[str, Any]) -> list[list]:
+    tx_json = _calculate_group_settlements(group)
     redis_service.save_group_settlements(tx_json, f"settlement-group:{group['id']}")
     return tx_json
+
+
+def _calculate_group_settlements(group: dict[str, Any]) -> list[list]:
+    group_users = group.get("users") or []
+    group_expenses = redis_service.get_group_expenses(group["id"])
+    if not group_expenses or not group_users:
+        return []
+
+    base_settlements = Settlement(group_expenses, group_users)
+    balances = [0.0 for _ in group_users]
+
+    for debtor_idx, creditor_idx, amount in base_settlements:
+        balances[int(debtor_idx)] -= float(amount)
+        balances[int(creditor_idx)] += float(amount)
+
+    user_indexes = {name: idx for idx, name in enumerate(group_users)}
+    for payment in redis_service.get_group_settlement_payments(group["id"]):
+        debtor_idx = user_indexes.get(payment.get("debtor"))
+        creditor_idx = user_indexes.get(payment.get("creditor"))
+        if debtor_idx is None or creditor_idx is None:
+            continue
+
+        amount = float(payment.get("amount") or 0)
+        balances[debtor_idx] += amount
+        balances[creditor_idx] -= amount
+
+    return _settlements_from_balances(balances)
+
+
+def _settlements_from_balances(balances: list[float]) -> list[list]:
+    debtors = [
+        (idx, -balance)
+        for idx, balance in enumerate(balances)
+        if balance < -0.005
+    ]
+    creditors = [
+        (idx, balance)
+        for idx, balance in enumerate(balances)
+        if balance > 0.005
+    ]
+
+    settlements = []
+    debtor_idx = creditor_idx = 0
+
+    while debtor_idx < len(debtors) and creditor_idx < len(creditors):
+        debtor_user_idx, debtor_amount = debtors[debtor_idx]
+        creditor_user_idx, creditor_amount = creditors[creditor_idx]
+
+        amount = min(debtor_amount, creditor_amount)
+        settlements.append([debtor_user_idx, creditor_user_idx, amount])
+
+        debtor_amount -= amount
+        creditor_amount -= amount
+
+        if debtor_amount <= 0.005:
+            debtor_idx += 1
+        else:
+            debtors[debtor_idx] = (debtor_user_idx, debtor_amount)
+
+        if creditor_amount <= 0.005:
+            creditor_idx += 1
+        else:
+            creditors[creditor_idx] = (creditor_user_idx, creditor_amount)
+
+    return settlements
+
+
+def _expense_access_group(
+    user: dict[str, Any],
+    expense: dict[str, Any],
+    require_payer: bool = False,
+):
+    group = redis_service.get_group_by_name(expense.get("group", ""))
+    if not group:
+        return None, (jsonify({"error": "Group not found"}), 404)
+
+    group_users = group.get("users") or []
+    if user["name"] not in group_users:
+        return None, (jsonify({"error": "You are not a member of this group"}), 403)
+
+    if require_payer and expense.get("payer") != user["name"]:
+        return None, (jsonify({"error": "Only the payer can change this expense"}), 403)
+
+    return group, None
+
+
+def _open_settlement_amount(
+    group: dict[str, Any], debtor: str, creditor: str
+) -> float | None:
+    users = group.get("users") or []
+    for open_debtor, open_creditor, amount in _named_settlements(
+        _calculate_group_settlements(group),
+        users,
+    ):
+        if open_debtor == debtor and open_creditor == creditor:
+            return float(amount)
+    return None
 
 
 def _named_settlements(settlements: list, users: list[str]) -> list[list]:
@@ -571,6 +819,10 @@ def _format_expense_notification(group: dict[str, Any], expense: dict[str, Any])
 
 def _format_money(amount: Any) -> str:
     return f"${float(amount or 0):.2f}"
+
+
+def _now_iso() -> str:
+    return datetime.now().isoformat()
 
 
 def _join_start_payload_group(payload: str, user: dict[str, Any] | None) -> dict[str, Any] | None:

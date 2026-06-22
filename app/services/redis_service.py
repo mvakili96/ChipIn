@@ -399,6 +399,11 @@ class RedisService:
         tx_json = [list(t) for t in tx]
         self.client.json().set(settlement_key, Path.root_path(), tx_json)
         return result == 1
+
+    def delete_expense_record(self, expense_id: str) -> bool:
+        redis_key = f"expense:{expense_id}"
+        result = self.client.delete(redis_key)
+        return result == 1
     
     def get_group_expenses(self, group_id: str):
         group_dict  = self.client.json().get(f"group:{group_id}")
@@ -451,6 +456,25 @@ class RedisService:
     def get_group_settlements(self, group_id: str) -> list[list]:
         settlement_key = f"settlement-group:{group_id}"
         return self.client.json().get(settlement_key)
+
+    def save_settlement_payment(
+        self, group_id: str, payment_dict: dict[str, Any]
+    ) -> dict[str, Any]:
+        payment_key = f"settlement-payment-group:{group_id}"
+        payments = self.client.json().get(payment_key) or []
+
+        if "id" not in payment_dict:
+            payment_dict["id"] = str(uuid.uuid4())
+        if "created_at" not in payment_dict:
+            payment_dict["created_at"] = datetime.now().isoformat()
+
+        payments.append(payment_dict)
+        self.client.json().set(payment_key, Path.root_path(), payments)
+        return payment_dict
+
+    def get_group_settlement_payments(self, group_id: str) -> list[dict[str, Any]]:
+        payment_key = f"settlement-payment-group:{group_id}"
+        return self.client.json().get(payment_key) or []
     
 
 
