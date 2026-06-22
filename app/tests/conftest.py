@@ -45,6 +45,13 @@ class MockRedisService:
                 return user
         return None
 
+    def get_user_by_name(self, name):
+        target_name = name.strip()
+        for user in self.get_all_users():
+            if user.get("name") == target_name:
+                return user
+        return None
+
     def upsert_telegram_user(self, telegram_user):
         telegram_id = str(telegram_user["id"])
         existing = self.get_user_by_telegram_id(telegram_id)
@@ -71,6 +78,10 @@ class MockRedisService:
         if not base_name:
             base_name = f"@{username}" if username else f"Telegram User {telegram_id}"
 
+        matching_user = self.get_user_by_name(base_name)
+        if matching_user and not matching_user.get("telegram_id"):
+            return self.link_telegram_user(matching_user["id"], telegram_user)
+
         existing_names = set(self.get_all_user_names())
         name = base_name if base_name not in existing_names else f"{base_name} ({telegram_id})"
 
@@ -83,6 +94,30 @@ class MockRedisService:
                 **fields,
             }
         )
+
+    def link_telegram_user(self, user_id, telegram_user):
+        user = self.get_user(user_id)
+        if not user:
+            return None
+
+        telegram_id = str(telegram_user["id"])
+        existing = self.get_user_by_telegram_id(telegram_id)
+        if existing and existing.get("id") != user_id:
+            return existing
+
+        user.update(
+            {
+                "telegram_id": telegram_id,
+                "telegram_username": telegram_user.get("username"),
+                "telegram_first_name": telegram_user.get("first_name"),
+                "telegram_last_name": telegram_user.get("last_name"),
+                "telegram_photo_url": telegram_user.get("photo_url"),
+                "telegram_language_code": telegram_user.get("language_code"),
+                "telegram_linked_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat(),
+            }
+        )
+        return self.save_user(user)
 
     # Group Operations
     def save_group(self, group_dict):

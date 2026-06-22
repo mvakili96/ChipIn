@@ -70,6 +70,67 @@ def test_telegram_auth_valid_init_data_upserts_user(client, monkeypatch):
     assert data["groups"] == []
 
 
+def test_telegram_auth_links_existing_user_by_display_name(
+    client, monkeypatch, mock_redis_service
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    existing_user = mock_redis_service.save_user(
+        {
+            "name": "Moein",
+            "email": "moein@example.com",
+            "id": "existing-user-id",
+            "created_at": "2026-06-21T00:00:00",
+        }
+    )
+    init_data = make_init_data(
+        {"id": 1001, "first_name": "Moein", "username": "moein"}
+    )
+
+    response = client.post(
+        "/telegram/auth/",
+        data=json.dumps({"init_data": init_data}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    linked_user = mock_redis_service.get_user(existing_user["id"])
+    assert data["user"]["id"] == "existing-user-id"
+    assert linked_user["telegram_id"] == "1001"
+    assert linked_user["telegram_username"] == "moein"
+    assert linked_user["email"] == "moein@example.com"
+    assert "telegram_linked_at" in linked_user
+
+
+def test_telegram_auth_does_not_duplicate_matching_existing_user(
+    client, monkeypatch, mock_redis_service
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    mock_redis_service.save_user(
+        {
+            "name": "Moein",
+            "email": "moein@example.com",
+            "id": "existing-user-id",
+            "created_at": "2026-06-21T00:00:00",
+        }
+    )
+    init_data = make_init_data(
+        {"id": 1001, "first_name": "Moein", "username": "moein"}
+    )
+
+    response = client.post(
+        "/telegram/auth/",
+        data=json.dumps({"init_data": init_data}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    users = mock_redis_service.get_all_users()
+    assert len(users) == 1
+    assert users[0]["id"] == "existing-user-id"
+    assert users[0]["telegram_id"] == "1001"
+
+
 def test_telegram_auth_rejects_tampered_init_data(client, monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
     init_data = make_init_data({"id": 1001, "first_name": "Moein"})

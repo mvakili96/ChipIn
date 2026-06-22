@@ -142,28 +142,56 @@ class RedisService:
                 return user
         return None
 
+    def get_user_by_name(self, name: str) -> dict[str, Any] | None:
+        target_name = name.strip()
+        for user in self.get_all_users():
+            if user.get("name") == target_name:
+                return user
+        return None
+
     def upsert_telegram_user(self, telegram_user: dict[str, Any]) -> dict[str, Any]:
         telegram_id = str(telegram_user["id"])
         existing = self.get_user_by_telegram_id(telegram_id)
 
         if existing:
-            existing.update(self._telegram_user_fields(telegram_user))
+            existing.update(self._telegram_identity_fields(telegram_user))
             existing["updated_at"] = datetime.now().isoformat()
             return self.save_user(existing)
 
-        name = self._unique_telegram_user_name(telegram_user)
+        display_name = self._telegram_display_name(telegram_user)
+        matching_user = self.get_user_by_name(display_name)
+        if matching_user and not matching_user.get("telegram_id"):
+            return self.link_telegram_user(matching_user["id"], telegram_user)
+
         user_dict = {
-            "name": name,
+            "name": self._unique_telegram_user_name(display_name, telegram_id),
             "email": f"telegram-{telegram_id}@telegram.local",
             "id": str(uuid.uuid4()),
             "created_at": datetime.now().isoformat(),
-            **self._telegram_user_fields(telegram_user),
+            "source": "telegram",
+            **self._telegram_identity_fields(telegram_user),
         }
         return self.save_user(user_dict)
 
-    def _telegram_user_fields(self, telegram_user: dict[str, Any]) -> dict[str, Any]:
+    def link_telegram_user(
+        self, user_id: str, telegram_user: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        user = self.get_user(user_id)
+        if not user:
+            return None
+
+        telegram_id = str(telegram_user["id"])
+        existing = self.get_user_by_telegram_id(telegram_id)
+        if existing and existing.get("id") != user_id:
+            return existing
+
+        user.update(self._telegram_identity_fields(telegram_user))
+        user["telegram_linked_at"] = datetime.now().isoformat()
+        user["updated_at"] = datetime.now().isoformat()
+        return self.save_user(user)
+
+    def _telegram_identity_fields(self, telegram_user: dict[str, Any]) -> dict[str, Any]:
         return {
-            "source": "telegram",
             "telegram_id": str(telegram_user["id"]),
             "telegram_username": telegram_user.get("username"),
             "telegram_first_name": telegram_user.get("first_name"),
@@ -172,16 +200,19 @@ class RedisService:
             "telegram_language_code": telegram_user.get("language_code"),
         }
 
-    def _unique_telegram_user_name(self, telegram_user: dict[str, Any]) -> str:
+    def _telegram_display_name(self, telegram_user: dict[str, Any]) -> str:
         first_name = (telegram_user.get("first_name") or "").strip()
         last_name = (telegram_user.get("last_name") or "").strip()
         username = (telegram_user.get("username") or "").strip()
         telegram_id = str(telegram_user["id"])
 
-        base_name = " ".join(part for part in [first_name, last_name] if part).strip()
-        if not base_name:
-            base_name = f"@{username}" if username else f"Telegram User {telegram_id}"
+        display_name = " ".join(part for part in [first_name, last_name] if part).strip()
+        if display_name:
+            return display_name
 
+        return f"@{username}" if username else f"Telegram User {telegram_id}"
+
+    def _unique_telegram_user_name(self, base_name: str, telegram_id: str) -> str:
         existing_names = set(self.get_all_user_names())
         if base_name not in existing_names:
             return base_name

@@ -334,11 +334,24 @@ function renderUsersManageTable() {
         <tr data-user-row="${escapeHtml(user.id)}">
           <td><strong>${escapeHtml(user.name)}</strong></td>
           <td class="muted">${escapeHtml(user.email)}</td>
+          <td>${telegramLinkStatusMarkup(user)}</td>
           <td><small class="muted">${escapeHtml(user.id)}</small></td>
         </tr>
       `,
     )
     .join("");
+}
+
+function telegramLinkStatusMarkup(user) {
+  if (!user.telegram_id) {
+    return `<span class="status-badge" data-kind="muted">Not linked</span>`;
+  }
+
+  const label = user.telegram_username
+    ? `@${user.telegram_username}`
+    : `ID ${user.telegram_id}`;
+
+  return `<span class="status-badge" data-kind="linked">${escapeHtml(label)}</span>`;
 }
 
 function renderGroups() {
