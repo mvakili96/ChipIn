@@ -9,6 +9,7 @@ const state = {
   groups: [],
   settlements: { aggregate: [], groups: [] },
   selectedGroupId: "",
+  editingExpenseId: "",
   detail: null,
 };
 
@@ -149,6 +150,10 @@ function renderHeader() {
   els.userPill.textContent = state.user ? state.user.name : "";
 }
 
+function currentUserName() {
+  return state.user ? state.user.name : "";
+}
+
 function renderMetrics() {
   const net = (state.settlements.aggregate || []).reduce((sum, row) => {
     const amount = Number(row.amount) || 0;
@@ -221,11 +226,20 @@ function renderGroupDetail() {
 
   const group = detail.group;
   const users = group.users || [];
+  const editingExpense = (detail.expenses || []).find(
+    (expense) => expense.id === state.editingExpenseId,
+  );
+  const selectedSharers = editingExpense ? editingExpense.sharers || [] : users;
 
   els.groupDetail.hidden = false;
   els.groupDetail.innerHTML = `
     <div class="section-title">
       <h2>${escapeHtml(group.name)}</h2>
+      ${
+        group.private_chat_url
+          ? `<button class="secondary-button" type="button" data-open-bot="${escapeHtml(group.private_chat_url)}">Open Bot</button>`
+          : ""
+      }
     </div>
     <div class="detail-body">
       <div class="subsection">
@@ -238,28 +252,30 @@ function renderGroupDetail() {
       <form id="expense-form" class="expense-form">
         <div class="field">
           <label for="expense-name">Expense</label>
-          <input id="expense-name" name="name" type="text" required autocomplete="off">
+          <input id="expense-name" name="name" type="text" required autocomplete="off"
+            value="${escapeHtml(editingExpense ? editingExpense.name : "")}">
         </div>
         <div class="field">
           <label for="expense-amount">Amount</label>
-          <input id="expense-amount" name="amount" type="number" min="0.01" step="0.01" required>
+          <input id="expense-amount" name="amount" type="number" min="0.01" step="0.01" required
+            value="${escapeHtml(editingExpense ? editingExpense.amount : "")}">
         </div>
         <fieldset class="check-list">
           <legend>Sharers</legend>
           <div class="check-options">
-            ${users
-              .map(
-                (name) => `
-                  <label class="check-item">
-                    <input type="checkbox" name="sharers" value="${escapeHtml(name)}" checked>
-                    <span>${escapeHtml(name)}</span>
-                  </label>
-                `,
-              )
-              .join("")}
+            ${renderSharerInputs(users, selectedSharers)}
           </div>
         </fieldset>
-        <button class="primary-button" type="submit">Add Expense</button>
+        <div class="button-row">
+          <button class="primary-button" type="submit">
+            ${editingExpense ? "Save Expense" : "Add Expense"}
+          </button>
+          ${
+            editingExpense
+              ? `<button class="secondary-button" type="button" data-cancel-edit>Cancel</button>`
+              : ""
+          }
+        </div>
       </form>
 
       <div class="subsection">
@@ -271,8 +287,28 @@ function renderGroupDetail() {
         <h3>Expenses</h3>
         <div class="list">${renderExpenses(detail.expenses || [])}</div>
       </div>
+
+      <div class="subsection">
+        <h3>Payment History</h3>
+        <div class="list">${renderPaymentHistory(detail.payment_history || [])}</div>
+      </div>
     </div>
   `;
+}
+
+function renderSharerInputs(users, selectedSharers) {
+  const selected = new Set(selectedSharers);
+  return users
+    .map(
+      (name) => `
+        <label class="check-item">
+          <input type="checkbox" name="sharers" value="${escapeHtml(name)}"
+            ${selected.has(name) ? "checked" : ""}>
+          <span>${escapeHtml(name)}</span>
+        </label>
+      `,
+    )
+    .join("");
 }
 
 function renderSettlements(settlements) {
@@ -282,14 +318,29 @@ function renderSettlements(settlements) {
 
   return settlements
     .map(
-      ([debtor, creditor, amount]) => `
-        <div class="row">
-          <div class="row-main">
-            <span class="row-title">${escapeHtml(debtor)} to ${escapeHtml(creditor)}</span>
-            <span class="row-value">${money.format(Number(amount) || 0)}</span>
+      ([debtor, creditor, amount]) => {
+        const canMarkPaid =
+          debtor === currentUserName() || creditor === currentUserName();
+        return `
+          <div class="row">
+            <div class="row-main">
+              <span class="row-title">${escapeHtml(debtor)} to ${escapeHtml(creditor)}</span>
+              <span class="row-value">${money.format(Number(amount) || 0)}</span>
+            </div>
+            ${
+              canMarkPaid
+                ? `<div class="row-actions">
+                    <button class="secondary-button" type="button"
+                      data-mark-paid
+                      data-debtor="${escapeHtml(debtor)}"
+                      data-creditor="${escapeHtml(creditor)}"
+                      data-amount="${escapeHtml(amount)}">Mark Paid</button>
+                  </div>`
+                : ""
+            }
           </div>
-        </div>
-      `,
+        `;
+      },
     )
     .join("");
 }
@@ -301,15 +352,53 @@ function renderExpenses(expenses) {
 
   return expenses
     .map(
-      (expense) => `
+      (expense) => {
+        const canChange = expense.payer === currentUserName();
+        return `
+          <div class="row">
+            <div class="row-main">
+              <span class="row-title">${escapeHtml(expense.name)}</span>
+              <span class="row-value">${money.format(Number(expense.amount) || 0)}</span>
+            </div>
+            <div class="row-meta">
+              <span>${escapeHtml(expense.payer)}</span>
+              <span>${(expense.sharers || []).length} sharers</span>
+            </div>
+            ${
+              canChange
+                ? `<div class="row-actions">
+                    <button class="secondary-button" type="button"
+                      data-edit-expense="${escapeHtml(expense.id)}">Edit</button>
+                    <button class="danger-button" type="button"
+                      data-delete-expense="${escapeHtml(expense.id)}">Delete</button>
+                  </div>`
+                : ""
+            }
+          </div>
+        `;
+      },
+    )
+    .join("");
+}
+
+function renderPaymentHistory(payments) {
+  if (!payments.length) {
+    return `<div class="empty">No paid settlements yet</div>`;
+  }
+
+  return [...payments]
+    .reverse()
+    .map(
+      (payment) => `
         <div class="row">
           <div class="row-main">
-            <span class="row-title">${escapeHtml(expense.name)}</span>
-            <span class="row-value">${money.format(Number(expense.amount) || 0)}</span>
+            <span class="row-title">
+              ${escapeHtml(payment.debtor)} paid ${escapeHtml(payment.creditor)}
+            </span>
+            <span class="row-value">${money.format(Number(payment.amount) || 0)}</span>
           </div>
           <div class="row-meta">
-            <span>${escapeHtml(expense.payer)}</span>
-            <span>${(expense.sharers || []).length} sharers</span>
+            <span>Recorded by ${escapeHtml(payment.recorded_by || "")}</span>
           </div>
         </div>
       `,
@@ -344,8 +433,13 @@ els.groupDetail.addEventListener("submit", async (event) => {
   const sharers = formData.getAll("sharers");
 
   try {
-    await api("/telegram/api/expenses/", {
-      method: "POST",
+    const isEditing = Boolean(state.editingExpenseId);
+    const path = isEditing
+      ? `/telegram/api/expenses/${encodeURIComponent(state.editingExpenseId)}/`
+      : "/telegram/api/expenses/";
+
+    await api(path, {
+      method: isEditing ? "PUT" : "POST",
       body: JSON.stringify({
         group_id: state.selectedGroupId,
         name: formData.get("name"),
@@ -354,16 +448,105 @@ els.groupDetail.addEventListener("submit", async (event) => {
       }),
     });
 
+    state.editingExpenseId = "";
     form.reset();
     await refreshGroups();
     await loadGroup(state.selectedGroupId);
     haptic("success");
-    showToast("Expense added");
+    showToast(isEditing ? "Expense updated" : "Expense added");
   } catch (error) {
     haptic("error");
     showToast(error.message, "error");
   }
 });
+
+els.groupDetail.addEventListener("click", async (event) => {
+  const openBotButton = event.target.closest("[data-open-bot]");
+  if (openBotButton) {
+    openBot(openBotButton.dataset.openBot);
+    return;
+  }
+
+  if (event.target.closest("[data-cancel-edit]")) {
+    state.editingExpenseId = "";
+    renderGroupDetail();
+    return;
+  }
+
+  const editButton = event.target.closest("[data-edit-expense]");
+  if (editButton) {
+    state.editingExpenseId = editButton.dataset.editExpense;
+    renderGroupDetail();
+    return;
+  }
+
+  const deleteButton = event.target.closest("[data-delete-expense]");
+  if (deleteButton) {
+    await deleteExpense(deleteButton.dataset.deleteExpense);
+    return;
+  }
+
+  const paidButton = event.target.closest("[data-mark-paid]");
+  if (paidButton) {
+    await markSettlementPaid({
+      debtor: paidButton.dataset.debtor,
+      creditor: paidButton.dataset.creditor,
+      amount: paidButton.dataset.amount,
+    });
+  }
+});
+
+function openBot(url) {
+  if (!url) {
+    return;
+  }
+
+  if (tg && tg.openTelegramLink) {
+    tg.openTelegramLink(url);
+    return;
+  }
+
+  window.open(url, "_blank", "noopener");
+}
+
+async function deleteExpense(expenseId) {
+  if (!expenseId || !window.confirm("Delete this expense?")) {
+    return;
+  }
+
+  try {
+    await api(`/telegram/api/expenses/${encodeURIComponent(expenseId)}/`, {
+      method: "DELETE",
+    });
+    state.editingExpenseId = "";
+    await refreshGroups();
+    await loadGroup(state.selectedGroupId);
+    haptic("success");
+    showToast("Expense deleted");
+  } catch (error) {
+    haptic("error");
+    showToast(error.message, "error");
+  }
+}
+
+async function markSettlementPaid({ debtor, creditor, amount }) {
+  try {
+    await api(
+      `/telegram/api/groups/${encodeURIComponent(state.selectedGroupId)}/settlements/paid/`,
+      {
+        method: "POST",
+        body: JSON.stringify({ debtor, creditor, amount }),
+      },
+    );
+    await refreshGroups();
+    await loadGroup(state.selectedGroupId);
+    haptic("success");
+    showToast("Settlement marked paid");
+  } catch (error) {
+    haptic("error");
+    showToast(error.message, "error");
+  }
+}
 
 async function start() {
   if (tg) {

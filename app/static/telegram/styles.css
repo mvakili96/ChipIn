@@ -330,13 +330,48 @@ button {
   white-space: nowrap;
 }
 
-.primary-button {
+.button-row,
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button-row {
+  align-items: center;
+}
+
+.row-actions {
+  margin-top: 2px;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button {
   min-height: 44px;
-  border: 0;
+  padding: 0 12px;
   border-radius: 8px;
+  font-weight: 740;
+}
+
+.primary-button {
+  border: 0;
   color: var(--accent-text);
   background: var(--accent);
-  font-weight: 740;
+}
+
+.secondary-button,
+.danger-button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.secondary-button {
+  color: var(--text);
+}
+
+.danger-button {
+  color: var(--bad);
 }
 
 .toast {
