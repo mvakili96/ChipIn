@@ -153,6 +153,7 @@ def create_telegram_expense():
     )
     saved_expense = redis_service.save_expense(expense.to_dict())
     settlements = _save_updated_group_settlements(group, expense)
+    _notify_telegram_group_expense(group, saved_expense)
 
     return jsonify(
         {
@@ -383,23 +384,38 @@ def _handle_bot_update(update: dict[str, Any]) -> None:
         if user:
             group = redis_service.add_user_to_group(group["id"], user["name"])
 
-    if command == "/balance" and user:
-        if _is_group_chat(chat):
-            telegram_bot_client.send_message(
-                chat["id"],
-                "Open ChipIn privately to view your balance.",
-                _private_chat_reply_markup(group["id"] if group else None),
-            )
-            return
+    if command == "/help":
+        _send_help_message(chat, group)
+        return
 
-        telegram_bot_client.send_message(
-            chat["id"],
+    if command == "/groups" and user:
+        _send_private_only_command(
+            chat,
+            group,
+            _format_groups_message(user),
+            _mini_app_reply_markup(),
+        )
+        return
+
+    if command == "/balance" and user:
+        _send_private_only_command(
+            chat,
+            group,
             _format_balance_message(user),
             _mini_app_reply_markup(group["id"] if group else None),
         )
         return
 
-    if command in {"/start", "/chipin", "/help"}:
+    if command == "/settlements" and user:
+        _send_private_only_command(
+            chat,
+            group,
+            _format_settlements_message(user),
+            _mini_app_reply_markup(group["id"] if group else None),
+        )
+        return
+
+    if command in {"/start", "/chipin"}:
         if _is_group_chat(chat):
             group_name = html.escape(group["name"] if group else chat.get("title", "this group"))
             text = (
@@ -441,6 +457,58 @@ def _handle_chat_membership_update(update: dict[str, Any]) -> None:
         redis_service.ensure_telegram_group(chat)
 
 
+def _notify_telegram_group_expense(group: dict[str, Any], expense: dict[str, Any]) -> None:
+    telegram_chat_id = group.get("telegram_chat_id")
+    if not telegram_chat_id:
+        return
+
+    telegram_bot_client.send_message(
+        telegram_chat_id,
+        _format_expense_notification(group, expense),
+        _private_chat_reply_markup(group["id"]),
+    )
+
+
+def _send_help_message(chat: dict[str, Any], group: dict[str, Any] | None) -> None:
+    if _is_group_chat(chat):
+        text = (
+            "ChipIn commands in this group:\n"
+            "/chipin - link this Telegram group to ChipIn\n"
+            "/balance - open private balance view\n"
+            "/help - show this help"
+        )
+        reply_markup = _private_chat_reply_markup(group["id"] if group else None)
+    else:
+        text = (
+            "ChipIn commands:\n"
+            "/start - open the Mini App\n"
+            "/groups - list your groups\n"
+            "/balance - show your aggregate balance\n"
+            "/settlements - show open settlements\n"
+            "/help - show this help"
+        )
+        reply_markup = _mini_app_reply_markup(group["id"] if group else None)
+
+    telegram_bot_client.send_message(chat["id"], text, reply_markup)
+
+
+def _send_private_only_command(
+    chat: dict[str, Any],
+    group: dict[str, Any] | None,
+    private_text: str,
+    private_reply_markup: dict[str, Any] | None,
+) -> None:
+    if _is_group_chat(chat):
+        telegram_bot_client.send_message(
+            chat["id"],
+            "Open ChipIn privately to view that.",
+            _private_chat_reply_markup(group["id"] if group else None),
+        )
+        return
+
+    telegram_bot_client.send_message(chat["id"], private_text, private_reply_markup)
+
+
 def _format_balance_message(user: dict[str, Any]) -> str:
     settlements = _user_settlements_payload(user)["aggregate"]
     if not settlements:
@@ -455,6 +523,54 @@ def _format_balance_message(user: dict[str, Any]) -> str:
         else:
             lines.append(f"You owe {other_user} {amount}")
     return "\n".join(lines)
+
+
+def _format_groups_message(user: dict[str, Any]) -> str:
+    groups = redis_service.get_groups_for_user(user["name"])
+    if not groups:
+        return "You are not in any ChipIn groups yet."
+
+    lines = ["Your ChipIn groups:"]
+    for group in groups:
+        member_count = len(group.get("users") or [])
+        expense_count = len(redis_service.get_group_expenses(group["id"]))
+        lines.append(
+            f"- {html.escape(group['name'])}: {member_count} users, {expense_count} expenses"
+        )
+    return "\n".join(lines)
+
+
+def _format_settlements_message(user: dict[str, Any]) -> str:
+    settlements_payload = _user_settlements_payload(user)
+    if not settlements_payload["groups"]:
+        return "You have no open ChipIn settlements."
+
+    lines = ["Your open settlements:"]
+    for group in settlements_payload["groups"]:
+        lines.append(f"\n{html.escape(group['group_name'])}:")
+        for debtor, creditor, amount in group["settlements"]:
+            lines.append(
+                f"- {html.escape(debtor)} pays {html.escape(creditor)} {_format_money(amount)}"
+            )
+
+    return "\n".join(lines)
+
+
+def _format_expense_notification(group: dict[str, Any], expense: dict[str, Any]) -> str:
+    payer = html.escape(expense.get("payer", "Someone"))
+    name = html.escape(expense.get("name", "an expense"))
+    group_name = html.escape(group.get("name", "this group"))
+    amount = _format_money(expense.get("amount", 0))
+    sharers_count = len(expense.get("sharers") or [])
+
+    return (
+        f"{payer} added <b>{name}</b> for <b>{amount}</b> in <b>{group_name}</b>.\n"
+        f"Split with {sharers_count} users."
+    )
+
+
+def _format_money(amount: Any) -> str:
+    return f"${float(amount or 0):.2f}"
 
 
 def _join_start_payload_group(payload: str, user: dict[str, Any] | None) -> dict[str, Any] | None:
