@@ -227,6 +227,12 @@ class MockRedisService:
         self.data.pop(key, None)
         return existed and key not in self.data.keys()
 
+    def delete_expense_record(self, expense_id):
+        key = f"expense:{expense_id}"
+        existed = key in self.data
+        self.data.pop(key, None)
+        return existed and key not in self.data.keys()
+
     def get_group_expenses(self, group_id):
         group = self.get_group(group_id)
         if not group:
@@ -270,6 +276,21 @@ class MockRedisService:
 
     def get_group_settlements(self, group_id):
         return self.data.get(f"settlement-group:{group_id}")
+
+    def save_settlement_payment(self, group_id, payment_dict):
+        key = f"settlement-payment-group:{group_id}"
+        payments = self.data.get(key, [])
+        payment_dict = dict(payment_dict)
+        if "id" not in payment_dict:
+            payment_dict["id"] = str(uuid.uuid4())
+        if "created_at" not in payment_dict:
+            payment_dict["created_at"] = datetime.now().isoformat()
+        payments.append(payment_dict)
+        self.data[key] = payments
+        return payment_dict
+
+    def get_group_settlement_payments(self, group_id):
+        return self.data.get(f"settlement-payment-group:{group_id}", [])
 
 
 @pytest.fixture

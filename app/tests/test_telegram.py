@@ -47,6 +47,36 @@ class FakeBot:
         )
 
 
+def save_manual_group(mock_redis_service, users=None):
+    return mock_redis_service.save_group(
+        {
+            "name": "P2 Trip",
+            "users": users or ["Moein", "Bob"],
+            "id": "p2-group-id",
+            "created_at": "2026-06-21T00:00:00",
+            "source": "manual",
+        }
+    )
+
+
+def create_telegram_expense(client, init_data, group_id, amount=20):
+    response = client.post(
+        "/telegram/api/expenses/",
+        data=json.dumps(
+            {
+                "group_id": group_id,
+                "name": "Dinner",
+                "amount": amount,
+                "sharers": ["Moein", "Bob"],
+            }
+        ),
+        content_type="application/json",
+        headers=auth_headers(init_data),
+    )
+    assert response.status_code == 201
+    return response.get_json()["saved_expense"]
+
+
 def test_telegram_client_served(client):
     response = client.get("/telegram/")
 
@@ -232,6 +262,118 @@ def test_telegram_expense_creation_uses_authenticated_user(
     assert "Moein added <b>Dinner</b>" in fake_bot.messages[0]["text"]
     button = fake_bot.messages[0]["reply_markup"]["inline_keyboard"][0][0]
     assert button["url"].startswith("https://t.me/chipin_test_bot?start=group_")
+
+
+def test_telegram_expense_update_requires_payer_and_recomputes_settlements(
+    client, monkeypatch, mock_redis_service
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    group = save_manual_group(mock_redis_service)
+    moein_init_data = make_init_data({"id": 1001, "first_name": "Moein"})
+    bob_init_data = make_init_data({"id": 1002, "first_name": "Bob"})
+    expense = create_telegram_expense(client, moein_init_data, group["id"])
+
+    forbidden_response = client.put(
+        f"/telegram/api/expenses/{expense['id']}/",
+        data=json.dumps({"amount": 30}),
+        content_type="application/json",
+        headers=auth_headers(bob_init_data),
+    )
+
+    assert forbidden_response.status_code == 403
+
+    response = client.put(
+        f"/telegram/api/expenses/{expense['id']}/",
+        data=json.dumps(
+            {
+                "name": "Updated Dinner",
+                "amount": 30,
+                "sharers": ["Moein", "Bob"],
+            }
+        ),
+        content_type="application/json",
+        headers=auth_headers(moein_init_data),
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["saved_expense"]["name"] == "Updated Dinner"
+    assert data["saved_expense"]["amount"] == 30.0
+    assert "updated_at" in data["saved_expense"]
+    assert data["group_settlement"] == [["Bob", "Moein", 15.0]]
+
+
+def test_telegram_expense_delete_requires_payer_and_recomputes_settlements(
+    client, monkeypatch, mock_redis_service
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    group = save_manual_group(mock_redis_service)
+    moein_init_data = make_init_data({"id": 1001, "first_name": "Moein"})
+    bob_init_data = make_init_data({"id": 1002, "first_name": "Bob"})
+    expense = create_telegram_expense(client, moein_init_data, group["id"])
+
+    forbidden_response = client.delete(
+        f"/telegram/api/expenses/{expense['id']}/",
+        headers=auth_headers(bob_init_data),
+    )
+
+    assert forbidden_response.status_code == 403
+    assert mock_redis_service.get_expense(expense["id"]) is not None
+
+    response = client.delete(
+        f"/telegram/api/expenses/{expense['id']}/",
+        headers=auth_headers(moein_init_data),
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert mock_redis_service.get_expense(expense["id"]) is None
+    assert data["group_settlement"] == []
+
+
+def test_telegram_mark_settlement_paid_records_history_and_closes_balance(
+    client, monkeypatch, mock_redis_service
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    group = save_manual_group(mock_redis_service)
+    moein_init_data = make_init_data({"id": 1001, "first_name": "Moein"})
+    bob_init_data = make_init_data({"id": 1002, "first_name": "Bob"})
+    create_telegram_expense(client, moein_init_data, group["id"])
+
+    response = client.post(
+        f"/telegram/api/groups/{group['id']}/settlements/paid/",
+        data=json.dumps({"debtor": "Bob", "creditor": "Moein", "amount": 10}),
+        content_type="application/json",
+        headers=auth_headers(bob_init_data),
+    )
+
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data["payment"]["debtor"] == "Bob"
+    assert data["payment"]["creditor"] == "Moein"
+    assert data["payment"]["recorded_by"] == "Bob"
+    assert data["group_settlement"] == []
+    assert data["detail"]["payment_history"] == [data["payment"]]
+
+    duplicate_response = client.post(
+        f"/telegram/api/groups/{group['id']}/settlements/paid/",
+        data=json.dumps({"debtor": "Bob", "creditor": "Moein", "amount": 10}),
+        content_type="application/json",
+        headers=auth_headers(bob_init_data),
+    )
+
+    assert duplicate_response.status_code == 400
+    assert duplicate_response.get_json()["error"] == "Settlement is not open"
+
+    detail_response = client.get(
+        f"/telegram/api/groups/{group['id']}/",
+        headers=auth_headers(moein_init_data),
+    )
+
+    assert detail_response.status_code == 200
+    detail = detail_response.get_json()
+    assert detail["settlements"] == []
+    assert detail["payment_history"][0]["amount"] == 10.0
 
 
 def test_telegram_help_command_lists_commands(client, monkeypatch):
