@@ -37,6 +37,16 @@ def auth_headers(init_data):
     return {"X-Telegram-Init-Data": init_data}
 
 
+class FakeBot:
+    def __init__(self):
+        self.messages = []
+
+    def send_message(self, chat_id, text, reply_markup=None):
+        self.messages.append(
+            {"chat_id": chat_id, "text": text, "reply_markup": reply_markup}
+        )
+
+
 def test_telegram_client_served(client):
     response = client.get("/telegram/")
 
@@ -171,7 +181,12 @@ def test_telegram_auth_creates_group_from_chat_and_self_joins(client, monkeypatc
 def test_telegram_expense_creation_uses_authenticated_user(
     client, monkeypatch, mock_redis_service
 ):
+    import routes.telegram as telegram_module
+
+    fake_bot = FakeBot()
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "chipin_test_bot")
+    monkeypatch.setattr(telegram_module, "telegram_bot_client", fake_bot)
     init_data = make_init_data(
         {"id": 1001, "first_name": "Moein"},
         {"id": -2001, "type": "group", "title": "Calgary Trip"},
@@ -212,6 +227,201 @@ def test_telegram_expense_creation_uses_authenticated_user(
     assert data["saved_expense"]["payer"] == "Moein"
     assert data["saved_expense"]["group"] == "Calgary Trip"
     assert data["group_settlement"] == [["Bob", "Moein", 10.0]]
+    assert len(fake_bot.messages) == 1
+    assert fake_bot.messages[0]["chat_id"] == "-2001"
+    assert "Moein added <b>Dinner</b>" in fake_bot.messages[0]["text"]
+    button = fake_bot.messages[0]["reply_markup"]["inline_keyboard"][0][0]
+    assert button["url"].startswith("https://t.me/chipin_test_bot?start=group_")
+
+
+def test_telegram_help_command_lists_commands(client, monkeypatch):
+    import routes.telegram as telegram_module
+
+    fake_bot = FakeBot()
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://chipin.example")
+    monkeypatch.setattr(telegram_module, "telegram_bot_client", fake_bot)
+
+    response = client.post(
+        "/telegram/webhook/",
+        data=json.dumps(
+            {
+                "update_id": 1,
+                "message": {
+                    "chat": {"id": 1001, "type": "private", "first_name": "Moein"},
+                    "from": {"id": 1001, "first_name": "Moein"},
+                    "text": "/help",
+                },
+            }
+        ),
+        content_type="application/json",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert "/groups" in fake_bot.messages[0]["text"]
+    assert "/settlements" in fake_bot.messages[0]["text"]
+
+
+def test_telegram_groups_command_lists_private_groups(
+    client, monkeypatch, mock_redis_service
+):
+    import routes.telegram as telegram_module
+
+    fake_bot = FakeBot()
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://chipin.example")
+    monkeypatch.setattr(telegram_module, "telegram_bot_client", fake_bot)
+
+    user = mock_redis_service.upsert_telegram_user(
+        {"id": 1001, "first_name": "Moein"}
+    )
+    group = mock_redis_service.ensure_telegram_group(
+        {"id": -2001, "type": "group", "title": "Calgary Trip"}
+    )
+    mock_redis_service.add_user_to_group(group["id"], user["name"])
+
+    response = client.post(
+        "/telegram/webhook/",
+        data=json.dumps(
+            {
+                "update_id": 1,
+                "message": {
+                    "chat": {"id": 1001, "type": "private", "first_name": "Moein"},
+                    "from": {"id": 1001, "first_name": "Moein"},
+                    "text": "/groups",
+                },
+            }
+        ),
+        content_type="application/json",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert "Your ChipIn groups:" in fake_bot.messages[0]["text"]
+    assert "Calgary Trip" in fake_bot.messages[0]["text"]
+
+
+def test_telegram_balance_command_reports_private_balance(
+    client, monkeypatch, mock_redis_service
+):
+    import routes.telegram as telegram_module
+
+    fake_bot = FakeBot()
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://chipin.example")
+    monkeypatch.setattr(telegram_module, "telegram_bot_client", fake_bot)
+
+    user = mock_redis_service.upsert_telegram_user(
+        {"id": 1001, "first_name": "Moein"}
+    )
+    group = mock_redis_service.ensure_telegram_group(
+        {"id": -2001, "type": "group", "title": "Calgary Trip"}
+    )
+    mock_redis_service.add_user_to_group(group["id"], user["name"])
+    mock_redis_service.add_user_to_group(group["id"], "Bob")
+    mock_redis_service.save_group_settlements(
+        [[1, 0, 10.0]],
+        f"settlement-group:{group['id']}",
+    )
+
+    response = client.post(
+        "/telegram/webhook/",
+        data=json.dumps(
+            {
+                "update_id": 1,
+                "message": {
+                    "chat": {"id": 1001, "type": "private", "first_name": "Moein"},
+                    "from": {"id": 1001, "first_name": "Moein"},
+                    "text": "/balance",
+                },
+            }
+        ),
+        content_type="application/json",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert "Your ChipIn balance:" in fake_bot.messages[0]["text"]
+    assert "Bob owes you $10.00" in fake_bot.messages[0]["text"]
+
+
+def test_telegram_balance_command_in_group_uses_private_handoff(
+    client, monkeypatch
+):
+    import routes.telegram as telegram_module
+
+    fake_bot = FakeBot()
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
+    monkeypatch.setenv("TELEGRAM_BOT_USERNAME", "chipin_test_bot")
+    monkeypatch.setattr(telegram_module, "telegram_bot_client", fake_bot)
+
+    response = client.post(
+        "/telegram/webhook/",
+        data=json.dumps(
+            {
+                "update_id": 1,
+                "message": {
+                    "chat": {"id": -2001, "type": "group", "title": "Calgary Trip"},
+                    "from": {"id": 1001, "first_name": "Moein"},
+                    "text": "/balance",
+                },
+            }
+        ),
+        content_type="application/json",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert fake_bot.messages[0]["chat_id"] == -2001
+    assert "Open ChipIn privately" in fake_bot.messages[0]["text"]
+    button = fake_bot.messages[0]["reply_markup"]["inline_keyboard"][0][0]
+    assert button["url"].startswith("https://t.me/chipin_test_bot?start=group_")
+
+
+def test_telegram_settlements_command_lists_private_settlements(
+    client, monkeypatch, mock_redis_service
+):
+    import routes.telegram as telegram_module
+
+    fake_bot = FakeBot()
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://chipin.example")
+    monkeypatch.setattr(telegram_module, "telegram_bot_client", fake_bot)
+
+    user = mock_redis_service.upsert_telegram_user(
+        {"id": 1001, "first_name": "Moein"}
+    )
+    group = mock_redis_service.ensure_telegram_group(
+        {"id": -2001, "type": "group", "title": "Calgary Trip"}
+    )
+    mock_redis_service.add_user_to_group(group["id"], user["name"])
+    mock_redis_service.add_user_to_group(group["id"], "Bob")
+    mock_redis_service.save_group_settlements(
+        [[1, 0, 10.0]],
+        f"settlement-group:{group['id']}",
+    )
+
+    response = client.post(
+        "/telegram/webhook/",
+        data=json.dumps(
+            {
+                "update_id": 1,
+                "message": {
+                    "chat": {"id": 1001, "type": "private", "first_name": "Moein"},
+                    "from": {"id": 1001, "first_name": "Moein"},
+                    "text": "/settlements",
+                },
+            }
+        ),
+        content_type="application/json",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert "Your open settlements:" in fake_bot.messages[0]["text"]
+    assert "Calgary Trip" in fake_bot.messages[0]["text"]
+    assert "Bob pays Moein $10.00" in fake_bot.messages[0]["text"]
 
 
 def test_telegram_webhook_requires_secret(client, monkeypatch):
