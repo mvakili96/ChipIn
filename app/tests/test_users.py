@@ -10,7 +10,7 @@ def test_create_user(client):
     )
 
     assert response.status_code == 201
-    data = json.loads(response.data)
+    data = response.get_json()
     assert data["name"] == "agha vakili"
     assert data["email"] == "mjvk@example.com"
     assert "id" in data
@@ -26,8 +26,8 @@ def test_create_user_missing_fields(client):
     )
 
     assert response.status_code == 400
-    data = json.loads(response.data)
-    assert "error" in data
+    data = response.get_json()
+    assert data == {"error": "Invalid request: missing name or email"}
 
 
 def test_get_users(client):
@@ -45,17 +45,17 @@ def test_get_users(client):
     )
     response = client.get("/users/")
     assert response.status_code == 200
-    data = json.loads(response.data)
+    data = response.get_json()
     assert isinstance(data, list)
     assert len(data) == 2
-    assert data[0]["name"] == "User 1"
-    assert data[0]["email"] == "user1@example.com"
-    assert "id" in data[0]
-    assert "created_at" in data[0]
-    assert data[1]["name"] == "User 2"
-    assert data[1]["email"] == "user2@example.com"
-    assert "id" in data[1]
-    assert "created_at" in data[1]
+    users_by_name = {user["name"]: user for user in data}
+    assert set(users_by_name) == {"User 1", "User 2"}
+    assert users_by_name["User 1"]["email"] == "user1@example.com"
+    assert "id" in users_by_name["User 1"]
+    assert "created_at" in users_by_name["User 1"]
+    assert users_by_name["User 2"]["email"] == "user2@example.com"
+    assert "id" in users_by_name["User 2"]
+    assert "created_at" in users_by_name["User 2"]
 
 
 def test_get_user(client):
@@ -67,12 +67,12 @@ def test_get_user(client):
         content_type="application/json",
     )
     assert response.status_code == 201
-    data = json.loads(response.data)
+    data = response.get_json()
 
     # Get the user
     response = client.get(f"/users/{data['id']}/")
     assert response.status_code == 200
-    data = json.loads(response.data)
+    data = response.get_json()
     assert data["name"] == "User 1"
     assert data["email"] == "user1@example.com"
     assert "id" in data
@@ -87,7 +87,7 @@ def test_get_user_adds_trailing_slash(client):
         content_type="application/json",
     )
     assert response.status_code == 201
-    data = json.loads(response.data)
+    data = response.get_json()
 
     response = client.get(f"/users/{data['id']}")
 
@@ -101,8 +101,8 @@ def test_get_user_not_found(client):
     # Get the user
     response = client.get("/users/999/")
     assert response.status_code == 404
-    data = json.loads(response.data)
-    assert "error" in data
+    data = response.get_json()
+    assert data == {"error": "User not found"}
 
 
 def test_get_user_names(client):
@@ -114,12 +114,11 @@ def test_get_user_names(client):
         content_type="application/json",
     )
     assert response.status_code == 201
-    data = json.loads(response.data)
 
     # Get the user's names
     response = client.get("/users/user-names/")
     assert response.status_code == 200
-    data = json.loads(response.data)
+    data = response.get_json()
     assert type(data) is list
     assert data[0] == "User 1"
 
@@ -133,11 +132,11 @@ def test_get_user_attr(client):
         content_type="application/json",
     )
     assert response.status_code == 201
-    data = json.loads(response.data)
+    data = response.get_json()
 
     # Get the user's attributes
     for k in ["name", "email"]:
         response = client.get(f"/users/{data['id']}/{k}/")
-        this_data = json.loads(response.data)
+        this_data = response.get_json()
         assert response.status_code == 200
         assert this_data == data[k]
