@@ -150,10 +150,6 @@ function renderHeader() {
   els.userPill.textContent = state.user ? state.user.name : "";
 }
 
-function currentUserName() {
-  return state.user ? state.user.name : "";
-}
-
 function renderMetrics() {
   const net = (state.settlements.aggregate || []).reduce((sum, row) => {
     const amount = Number(row.amount) || 0;
@@ -317,31 +313,30 @@ function renderSettlements(settlements) {
   }
 
   return settlements
-    .map(
-      ([debtor, creditor, amount]) => {
-        const canMarkPaid =
-          debtor === currentUserName() || creditor === currentUserName();
-        return `
-          <div class="row">
-            <div class="row-main">
-              <span class="row-title">${escapeHtml(debtor)} to ${escapeHtml(creditor)}</span>
-              <span class="row-value">${money.format(Number(amount) || 0)}</span>
-            </div>
-            ${
-              canMarkPaid
-                ? `<div class="row-actions">
-                    <button class="secondary-button" type="button"
-                      data-mark-paid
-                      data-debtor="${escapeHtml(debtor)}"
-                      data-creditor="${escapeHtml(creditor)}"
-                      data-amount="${escapeHtml(amount)}">Mark Paid</button>
-                  </div>`
-                : ""
-            }
+    .map((row) => {
+      const settlement = settlementPayload(row);
+      return `
+        <div class="row">
+          <div class="row-main">
+            <span class="row-title">
+              ${escapeHtml(settlement.debtor)} to ${escapeHtml(settlement.creditor)}
+            </span>
+            <span class="row-value">${money.format(Number(settlement.amount) || 0)}</span>
           </div>
-        `;
-      },
-    )
+          ${
+            settlement.can_mark_paid
+              ? `<div class="row-actions">
+                  <button class="secondary-button" type="button"
+                    data-mark-paid
+                    data-debtor="${escapeHtml(settlement.debtor)}"
+                    data-creditor="${escapeHtml(settlement.creditor)}"
+                    data-amount="${escapeHtml(settlement.amount)}">Mark Paid</button>
+                </div>`
+              : ""
+          }
+        </div>
+      `;
+    })
     .join("");
 }
 
@@ -353,7 +348,6 @@ function renderExpenses(expenses) {
   return expenses
     .map(
       (expense) => {
-        const canChange = expense.payer === currentUserName();
         return `
           <div class="row">
             <div class="row-main">
@@ -365,12 +359,20 @@ function renderExpenses(expenses) {
               <span>${(expense.sharers || []).length} sharers</span>
             </div>
             ${
-              canChange
+              expense.can_edit || expense.can_delete
                 ? `<div class="row-actions">
-                    <button class="secondary-button" type="button"
-                      data-edit-expense="${escapeHtml(expense.id)}">Edit</button>
-                    <button class="danger-button" type="button"
-                      data-delete-expense="${escapeHtml(expense.id)}">Delete</button>
+                    ${
+                      expense.can_edit
+                        ? `<button class="secondary-button" type="button"
+                            data-edit-expense="${escapeHtml(expense.id)}">Edit</button>`
+                        : ""
+                    }
+                    ${
+                      expense.can_delete
+                        ? `<button class="danger-button" type="button"
+                            data-delete-expense="${escapeHtml(expense.id)}">Delete</button>`
+                        : ""
+                    }
                   </div>`
                 : ""
             }
@@ -379,6 +381,19 @@ function renderExpenses(expenses) {
       },
     )
     .join("");
+}
+
+function settlementPayload(row) {
+  if (!Array.isArray(row)) {
+    return row || {};
+  }
+
+  return {
+    debtor: row[0],
+    creditor: row[1],
+    amount: row[2],
+    can_mark_paid: false,
+  };
 }
 
 function renderPaymentHistory(payments) {

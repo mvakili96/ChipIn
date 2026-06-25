@@ -243,12 +243,14 @@ class MockRedisService:
                 "id": expense.get("id"),
                 "name": expense.get("name"),
                 "group": expense.get("group"),
+                "group_id": expense.get("group_id"),
                 "amount": expense.get("amount"),
                 "payer": expense.get("payer"),
                 "sharers": expense.get("sharers"),
             }
             for expense in self.get_all_expenses()
-            if expense.get("group") == group["name"]
+            if expense.get("group_id") == group_id
+            or (not expense.get("group_id") and expense.get("group") == group["name"])
         ]
 
     def get_user_paid_expenses(self, user_id):
@@ -315,6 +317,8 @@ def mock_redis_service(monkeypatch):
     import routes.expenses as expenses_module
     import routes.settlements as settlements_module
     import routes.telegram as telegram_module
+    import services.expense_service as expense_service_module
+    import services.settlement_service as settlement_service_module
 
     mock_service = MockRedisService()
 
@@ -325,6 +329,8 @@ def mock_redis_service(monkeypatch):
     monkeypatch.setattr(expenses_module, "redis_service", mock_service)
     monkeypatch.setattr(settlements_module, "redis_service", mock_service)
     monkeypatch.setattr(telegram_module, "redis_service", mock_service)
+    monkeypatch.setattr(expense_service_module, "redis_service", mock_service)
+    monkeypatch.setattr(settlement_service_module, "redis_service", mock_service)
 
     yield mock_service
 
