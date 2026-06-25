@@ -47,19 +47,33 @@ class FakeBot:
         )
 
 
-def save_manual_group(mock_redis_service, users=None):
+def save_manual_group(
+    mock_redis_service,
+    users=None,
+    group_id="p2-group-id",
+    name="P2 Trip",
+    source="manual",
+    telegram_chat_id=None,
+):
     return mock_redis_service.save_group(
         {
-            "name": "P2 Trip",
-            "users": users or ["Moein", "Bob"],
-            "id": "p2-group-id",
+            "name": name,
+            "users": ["Moein", "Bob"] if users is None else users,
+            "id": group_id,
             "created_at": "2026-06-21T00:00:00",
-            "source": "manual",
+            "source": source,
+            "telegram_chat_id": telegram_chat_id,
         }
     )
 
 
-def create_telegram_expense(client, init_data, group_id, amount=20):
+def create_telegram_expense(
+    client,
+    init_data,
+    group_id,
+    amount=20,
+    sharers=None,
+):
     response = client.post(
         "/telegram/api/expenses/",
         data=json.dumps(
@@ -67,7 +81,7 @@ def create_telegram_expense(client, init_data, group_id, amount=20):
                 "group_id": group_id,
                 "name": "Dinner",
                 "amount": amount,
-                "sharers": ["Moein", "Bob"],
+                "sharers": sharers or ["Moein", "Bob"],
             }
         ),
         content_type="application/json",
@@ -208,6 +222,82 @@ def test_telegram_auth_creates_group_from_chat_and_self_joins(client, monkeypatc
     assert data["groups"][0]["id"] == data["launch_group"]["id"]
 
 
+def test_telegram_create_group_from_chat_rejects_forged_body_chat(
+    client, monkeypatch, mock_redis_service
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    init_data = make_init_data({"id": 1001, "first_name": "Moein"})
+
+    response = client.post(
+        "/telegram/api/groups/from-chat/",
+        data=json.dumps(
+            {
+                "chat": {
+                    "id": -2001,
+                    "type": "group",
+                    "title": "Forged Group",
+                }
+            }
+        ),
+        content_type="application/json",
+        headers=auth_headers(init_data),
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Telegram group chat context is required"
+    assert mock_redis_service.get_all_groups() == []
+
+
+def test_telegram_join_group_requires_verified_group_context(
+    client, monkeypatch, mock_redis_service
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    group = save_manual_group(
+        mock_redis_service,
+        users=[],
+        group_id="telegram-group-id",
+        name="Calgary Trip",
+        source="telegram",
+        telegram_chat_id="-2001",
+    )
+    private_init_data = make_init_data({"id": 1001, "first_name": "Moein"})
+
+    response = client.post(
+        f"/telegram/api/groups/{group['id']}/join/",
+        headers=auth_headers(private_init_data),
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()["error"] == "Verified Telegram group context is required"
+    assert mock_redis_service.get_group(group["id"])["users"] == []
+
+
+def test_telegram_join_group_accepts_verified_group_launch(
+    client, monkeypatch, mock_redis_service
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    group = save_manual_group(
+        mock_redis_service,
+        users=[],
+        group_id="telegram-group-id",
+        name="Calgary Trip",
+        source="telegram",
+        telegram_chat_id="-2001",
+    )
+    group_init_data = make_init_data(
+        {"id": 1001, "first_name": "Moein"},
+        {"id": -2001, "type": "group", "title": "Calgary Trip"},
+    )
+
+    response = client.post(
+        f"/telegram/api/groups/{group['id']}/join/",
+        headers=auth_headers(group_init_data),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["group"]["users"] == ["Moein"]
+
+
 def test_telegram_expense_creation_uses_authenticated_user(
     client, monkeypatch, mock_redis_service
 ):
@@ -256,7 +346,9 @@ def test_telegram_expense_creation_uses_authenticated_user(
     data = response.get_json()
     assert data["saved_expense"]["payer"] == "Moein"
     assert data["saved_expense"]["group"] == "Calgary Trip"
+    assert data["saved_expense"]["group_id"] == group["id"]
     assert data["group_settlement"] == [["Bob", "Moein", 10.0]]
+    assert mock_redis_service.get_group_settlements(group["id"]) == [[1, 0, 10.0]]
     assert len(fake_bot.messages) == 1
     assert fake_bot.messages[0]["chat_id"] == "-2001"
     assert "Moein added <b>Dinner</b>" in fake_bot.messages[0]["text"]
@@ -301,6 +393,50 @@ def test_telegram_expense_update_requires_payer_and_recomputes_settlements(
     assert data["saved_expense"]["amount"] == 30.0
     assert "updated_at" in data["saved_expense"]
     assert data["group_settlement"] == [["Bob", "Moein", 15.0]]
+    assert mock_redis_service.get_group_settlements(group["id"]) == [[1, 0, 15.0]]
+
+
+def test_telegram_expense_access_uses_group_id_with_duplicate_group_names(
+    client, monkeypatch, mock_redis_service
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", BOT_TOKEN)
+    save_manual_group(
+        mock_redis_service,
+        users=["Moein", "Bob"],
+        group_id="same-name-a",
+        name="Same Name",
+    )
+    group = save_manual_group(
+        mock_redis_service,
+        users=["Moein", "Cara"],
+        group_id="same-name-b",
+        name="Same Name",
+    )
+    moein_init_data = make_init_data({"id": 1001, "first_name": "Moein"})
+    expense = create_telegram_expense(
+        client,
+        moein_init_data,
+        group["id"],
+        sharers=["Moein", "Cara"],
+    )
+
+    response = client.put(
+        f"/telegram/api/expenses/{expense['id']}/",
+        data=json.dumps(
+            {
+                "amount": 40,
+                "sharers": ["Moein", "Cara"],
+            }
+        ),
+        content_type="application/json",
+        headers=auth_headers(moein_init_data),
+    )
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["saved_expense"]["group_id"] == "same-name-b"
+    assert data["detail"]["group"]["id"] == "same-name-b"
+    assert data["group_settlement"] == [["Cara", "Moein", 20.0]]
 
 
 def test_telegram_expense_delete_requires_payer_and_recomputes_settlements(
@@ -329,6 +465,7 @@ def test_telegram_expense_delete_requires_payer_and_recomputes_settlements(
     data = response.get_json()
     assert mock_redis_service.get_expense(expense["id"]) is None
     assert data["group_settlement"] == []
+    assert mock_redis_service.get_group_settlements(group["id"]) == []
 
 
 def test_telegram_mark_settlement_paid_records_history_and_closes_balance(
@@ -354,6 +491,10 @@ def test_telegram_mark_settlement_paid_records_history_and_closes_balance(
     assert data["payment"]["recorded_by"] == "Bob"
     assert data["group_settlement"] == []
     assert data["detail"]["payment_history"] == [data["payment"]]
+    assert mock_redis_service.get_group_settlement_payments(group["id"]) == [
+        data["payment"]
+    ]
+    assert mock_redis_service.get_group_settlements(group["id"]) == []
 
     duplicate_response = client.post(
         f"/telegram/api/groups/{group['id']}/settlements/paid/",
@@ -578,6 +719,44 @@ def test_telegram_webhook_requires_secret(client, monkeypatch):
     assert response.status_code == 403
 
 
+def test_telegram_webhook_rejects_missing_secret_configuration(client, monkeypatch):
+    monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
+
+    response = client.post(
+        "/telegram/webhook/",
+        data=json.dumps({"update_id": 1}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 403
+
+
+def test_telegram_webhook_rejects_wrong_secret(client, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
+
+    response = client.post(
+        "/telegram/webhook/",
+        data=json.dumps({"update_id": 1}),
+        content_type="application/json",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "wrong"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_telegram_webhook_accepts_correct_secret(client, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
+
+    response = client.post(
+        "/telegram/webhook/",
+        data=json.dumps({"update_id": 1}),
+        content_type="application/json",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "secret"},
+    )
+
+    assert response.status_code == 200
+
+
 def test_telegram_webhook_links_group_and_sends_button(client, monkeypatch):
     import routes.telegram as telegram_module
 
@@ -623,6 +802,33 @@ def test_telegram_webhook_links_group_and_sends_button(client, monkeypatch):
     assert parse_qs(parsed_url.query)["start"][0].startswith("group_")
 
 
+def test_telegram_group_start_command_is_ignored(client, monkeypatch):
+    import routes.telegram as telegram_module
+
+    fake_bot = FakeBot()
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
+    monkeypatch.setattr(telegram_module, "telegram_bot_client", fake_bot)
+
+    response = client.post(
+        "/telegram/webhook/",
+        data=json.dumps(
+            {
+                "update_id": 1,
+                "message": {
+                    "chat": {"id": -2001, "type": "group", "title": "Calgary Trip"},
+                    "from": {"id": 1001, "first_name": "Moein"},
+                    "text": "/start",
+                },
+            }
+        ),
+        content_type="application/json",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert fake_bot.messages == []
+
+
 def test_telegram_private_start_payload_joins_group_and_sends_web_app(
     client, monkeypatch, mock_redis_service
 ):
@@ -641,6 +847,7 @@ def test_telegram_private_start_payload_joins_group_and_sends_web_app(
     group = mock_redis_service.ensure_telegram_group(
         {"id": -2001, "type": "group", "title": "Calgary Trip"}
     )
+    mock_redis_service.add_user_to_group(group["id"], "Moein")
     monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://chipin.example")
     monkeypatch.setattr(telegram_module, "telegram_bot_client", fake_bot)
@@ -670,3 +877,37 @@ def test_telegram_private_start_payload_joins_group_and_sends_web_app(
         "https://chipin.example/telegram/"
     )
     assert parse_qs(parsed_url.query)["group_id"] == [group["id"]]
+
+
+def test_telegram_private_start_payload_does_not_join_unlinked_user(
+    client, monkeypatch, mock_redis_service
+):
+    import routes.telegram as telegram_module
+
+    fake_bot = FakeBot()
+    group = mock_redis_service.ensure_telegram_group(
+        {"id": -2001, "type": "group", "title": "Calgary Trip"}
+    )
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secret")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://chipin.example")
+    monkeypatch.setattr(telegram_module, "telegram_bot_client", fake_bot)
+
+    response = client.post(
+        "/telegram/webhook/",
+        data=json.dumps(
+            {
+                "update_id": 1,
+                "message": {
+                    "chat": {"id": 1001, "type": "private", "first_name": "Moein"},
+                    "from": {"id": 1001, "first_name": "Moein"},
+                    "text": f"/start group_{group['id']}",
+                },
+            }
+        ),
+        content_type="application/json",
+        headers={"X-Telegram-Bot-Api-Secret-Token": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert mock_redis_service.get_group(group["id"])["users"] == []
+    assert "I could not find that ChipIn group" in fake_bot.messages[0]["text"]
