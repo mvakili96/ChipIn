@@ -114,7 +114,15 @@ Then configure the bot with BotFather and set the webhook to:
 https://your-public-chipin-host/telegram/webhook/
 ```
 
-Use the same `TELEGRAM_WEBHOOK_SECRET` as Telegram's webhook secret token. The Mini App URL is:
+Use the same `TELEGRAM_WEBHOOK_SECRET` as Telegram's webhook secret token:
+
+```bash
+curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  -d "url=$PUBLIC_BASE_URL/telegram/webhook/" \
+  -d "secret_token=$TELEGRAM_WEBHOOK_SECRET"
+```
+
+The Mini App URL is:
 
 ```text
 https://your-public-chipin-host/telegram/
