@@ -89,6 +89,7 @@ class RedisService:
             "id": expense.get("id"),
             "name": expense.get("name"),
             "group": expense.get("group"),
+            "group_id": expense.get("group_id"),
             "amount": expense.get("amount"),
             "payer": expense.get("payer"),
             "sharers": expense.get("sharers"),
@@ -260,11 +261,17 @@ class RedisService:
         if not group_name:
             return False
         
-        q = Query(f"@group:{{{group_name}}}").paging(0, 10_000)
-        res = self.client.ft("idx:expenses").search(q)
+        for key in self.client.keys("expense:*"):
+            expense = self.client.json().get(key)
+            if not expense:
+                continue
 
-        for doc in res.docs:
-            self.client.delete(doc.id)  
+            is_group_expense = expense.get("group_id") == group_id
+            is_legacy_group_expense = (
+                not expense.get("group_id") and expense.get("group") == group_name
+            )
+            if is_group_expense or is_legacy_group_expense:
+                self.client.delete(key)
 
         self.client.delete(f"settlement-group:{group_id}")
 
@@ -382,12 +389,15 @@ class RedisService:
         if not expense_dict:
             return False
         
-        group_name = expense_dict["group"]
-        group_dict = self.get_group_by_name(group_name)
+        group_id = expense_dict.get("group_id")
+        group_dict = self.get_group(group_id) if group_id else None
+        if not group_dict:
+            group_name = expense_dict["group"]
+            group_dict = self.get_group_by_name(group_name)
         if not group_dict:
             return False
         
-        group_id =  group_dict["id"]
+        group_id = group_dict["id"]
         group_users = group_dict["users"]
 
         result = self.client.delete(redis_key)
@@ -407,15 +417,20 @@ class RedisService:
     
     def get_group_expenses(self, group_id: str):
         group_dict  = self.client.json().get(f"group:{group_id}")
+        if not group_dict:
+            return []
         
-        group_name = self._escape_tag_value(group_dict["name"])
-        q = Query(f"@group:{{{group_name}}}").paging(0, 10_000)
-        res = self.client.ft("idx:expenses").search(q)
-
         group_expenses: list[dict[str, Any]] = []
-        for doc in res.docs:
-            exp = self.client.json().get(doc.id)
+        for key in self.client.keys("expense:*"):
+            exp = self.client.json().get(key)
             if not exp:
+                continue
+
+            is_group_expense = exp.get("group_id") == group_id
+            is_legacy_group_expense = (
+                not exp.get("group_id") and exp.get("group") == group_dict["name"]
+            )
+            if not is_group_expense and not is_legacy_group_expense:
                 continue
 
             group_expenses.append(self._expense_summary(exp))
