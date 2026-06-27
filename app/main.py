@@ -11,6 +11,7 @@ from routes.users import users_bp
 from routes.groups import groups_bp
 from routes.expenses import expenses_bp
 from routes.settlements import settlements_bp
+from routes.telegram import telegram_bp
 
 
 app = Flask(__name__)
@@ -20,6 +21,7 @@ app.register_blueprint(users_bp)
 app.register_blueprint(groups_bp)
 app.register_blueprint(expenses_bp)
 app.register_blueprint(settlements_bp)
+app.register_blueprint(telegram_bp)
 
 # Redis connection
 redis_client = redis.Redis(
@@ -43,6 +45,8 @@ def home():
                 "expenses": "/expenses",
                 "settlements": "/settlements",
                 "admin": "/admin/",
+                "telegram_client": "/telegram/",
+                "telegram_webhook": "/telegram/webhook/",
             },
         }
     )

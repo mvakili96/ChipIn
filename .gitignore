@@ -2,3 +2,8 @@
 redis-data/
 __pycache__/
 .DS_Store
+
+# Local secrets/config
+.env
+.env.*
+!.env.example
