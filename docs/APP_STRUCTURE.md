@@ -37,10 +37,16 @@ chipin/
 │   │       ├── index.html
 │   │       └── styles.css
 │   └── tests/
-│       ├── test_admin.py
 │       ├── conftest.py
-│       ├── test_groups.py
 │       ├── test_telegram.py
+│       ├── test_admin.py
+│       ├── test_expenses.py
+│       ├── test_groups.py
+│       ├── test_main.py
+│       ├── test_models.py
+│       ├── test_redis_service.py
+│       ├── test_settlement_model.py
+│       ├── test_settlements.py
 │       └── test_users.py
 └── docs/
     ├── APP_STRUCTURE.md
@@ -90,12 +96,18 @@ chipin/
   Static Telegram Mini App client for user-facing groups, expenses, balances, and settlements.
 
 - `app/tests/`:
-  Pytest-based API tests using a mocked in-memory Redis service.
-  - `test_admin.py`: admin panel serving tests
-  - `conftest.py`: shared fixtures and mock service
+  Pytest-based route, unit, and static smoke tests. Route tests use a mocked in-memory Redis service so they run quickly without depending on Redis state.
+  - `conftest.py`: shared Flask app/client fixtures, helpers, and mock Redis service
+  - `test_admin.py`: admin panel and static asset smoke tests
   - `test_users.py`: user route tests
   - `test_groups.py`: group route tests
   - `test_telegram.py`: Telegram auth, Mini App route, group linking, expense creation, and webhook tests
+  - `test_expenses.py`: expense route tests
+  - `test_main.py`: root API metadata smoke test
+  - `test_models.py`: model serialization unit tests
+  - `test_redis_service.py`: focused Redis service helper unit tests
+  - `test_settlement_model.py`: settlement calculation unit tests
+  - `test_settlements.py`: settlement route tests
 
 - `app/requirements.txt`:
   Python dependencies for the app and tests.

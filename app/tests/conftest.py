@@ -3,11 +3,13 @@ import sys
 import os
 import uuid
 from datetime import datetime
+import json
 
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from main import app as flask_app
+from models.settlement import Settlement
 
 
 class MockRedisService:
@@ -138,9 +140,21 @@ class MockRedisService:
 
     def delete_group(self, group_id):
         key = f"group:{group_id}"
-        existed = key in self.data
-        self.data.pop(key, None)
-        return existed and key not in self.data.keys()
+        group = self.data.get(key)
+        if not group:
+            return False
+
+        expense_keys = [
+            stored_key
+            for stored_key, expense in self.data.items()
+            if stored_key.startswith("expense:") and expense["group"] == group["name"]
+        ]
+        for expense_key in expense_keys:
+            self.data.pop(expense_key)
+
+        self.data.pop(f"settlement-group:{group_id}", None)
+        self.data.pop(key)
+        return True
 
     def get_group_by_name(self, name):
         for group in self.get_all_groups():
@@ -205,6 +219,17 @@ class MockRedisService:
         ]
 
     # Expense Operations
+    @staticmethod
+    def _expense_summary(expense):
+        return {
+            "id": expense.get("id"),
+            "name": expense.get("name"),
+            "group": expense.get("group"),
+            "amount": expense.get("amount"),
+            "payer": expense.get("payer"),
+            "sharers": expense.get("sharers"),
+        }
+
     def save_expense(self, expense_dict):
         key = f"expense:{expense_dict['id']}"
         self.data[key] = expense_dict
@@ -223,15 +248,23 @@ class MockRedisService:
 
     def delete_expense(self, expense_id):
         key = f"expense:{expense_id}"
-        existed = key in self.data
-        self.data.pop(key, None)
-        return existed and key not in self.data.keys()
+        expense = self.data.get(key)
+        if not expense:
+            return False
 
-    def delete_expense_record(self, expense_id):
-        key = f"expense:{expense_id}"
-        existed = key in self.data
-        self.data.pop(key, None)
-        return existed and key not in self.data.keys()
+        group = self.get_group_by_name(expense["group"])
+        if not group:
+            return False
+
+        self.data.pop(key)
+
+        group_expenses = self.get_group_expenses(group["id"])
+        tx = Settlement(group_expenses, group["users"])
+        self.save_group_settlements(
+            [list(settlement) for settlement in tx],
+            f"settlement-group:{group['id']}",
+        )
+        return True
 
     def get_group_expenses(self, group_id):
         group = self.get_group(group_id)
@@ -259,9 +292,9 @@ class MockRedisService:
             return []
 
         return [
-            expense
-            for expense in self.get_all_expenses()
-            if expense.get("payer") == user["name"]
+            self._expense_summary(expense)
+            for key, expense in self.data.items()
+            if key.startswith("expense:") and expense["payer"] == user["name"]
         ]
 
     # Settlement Operations
@@ -273,7 +306,7 @@ class MockRedisService:
         return {
             key: value
             for key, value in self.data.items()
-            if key.startswith("settlement-group:")
+            if key.startswith("settlement-group:") and value
         }
 
     def get_group_settlements(self, group_id):
@@ -306,6 +339,42 @@ def app():
 def client(app):
     """Create test client"""
     return app.test_client()
+
+
+@pytest.fixture
+def create_user(client):
+    """Create a user through the API and return the JSON response."""
+
+    def _create_user(name="User 1", email="user1@example.com"):
+        response = client.post(
+            "/users/",
+            data=json.dumps({"name": name, "email": email}),
+            content_type="application/json",
+        )
+        assert response.status_code == 201
+        return response.get_json()
+
+    return _create_user
+
+
+@pytest.fixture
+def create_group(client, create_user):
+    """Create a group through the API and return the JSON response."""
+
+    def _create_group(name="Group 1", users=None):
+        members = users or ["User 1", "User 2"]
+        for index, member_name in enumerate(members, start=1):
+            create_user(name=member_name, email=f"user{index}@example.com")
+
+        response = client.post(
+            "/groups/",
+            data=json.dumps({"name": name, "users": members}),
+            content_type="application/json",
+        )
+        assert response.status_code == 201
+        return response.get_json()
+
+    return _create_group
 
 
 @pytest.fixture(autouse=True)

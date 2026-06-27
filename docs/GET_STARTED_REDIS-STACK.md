@@ -25,10 +25,10 @@ docker exec -it redis-stack redis-cli
 Each expense is stored as a separate JSON document using **RedisJSON**.
 
 ```bash
-JSON.SET expense:1 $ '{"id": "1", "title": "Walmart", "expense": 500, "paid_by": "Alex", "sharers": ["Alex", "Dan", "Joe"], "date": "2024-12-22"}'
-JSON.SET expense:2 $ '{"id": "2", "title": "Airbnb", "expense": 435, "paid_by": "Dan", "sharers": ["Dan", "Joe"], "date": "2024-12-10"}'
-JSON.SET expense:3 $ '{"id": "3", "title": "bar", "expense": 56, "paid_by": "Joe", "sharers": ["Dan", "Joe"], "date": "2024-12-11"}'
-JSON.SET expense:4 $ '{"id": "4", "title": "Car rental", "expense": 189, "paid_by": "Joe", "sharers": ["Alex", "Joe"], "date": "2024-12-16"}'
+JSON.SET expense:1 $ '{"id": "1", "name": "Walmart", "group": "Calgary", "amount": 500, "payer": "Alex", "sharers": ["Alex", "Dan", "Joe"], "created_at": "2026-06-21T00:00:00"}'
+JSON.SET expense:2 $ '{"id": "2", "name": "Airbnb", "group": "Calgary", "amount": 435, "payer": "Dan", "sharers": ["Dan", "Joe"], "created_at": "2026-06-21T00:00:00"}'
+JSON.SET expense:3 $ '{"id": "3", "name": "Bar", "group": "Calgary", "amount": 56, "payer": "Joe", "sharers": ["Dan", "Joe"], "created_at": "2026-06-21T00:00:00"}'
+JSON.SET expense:4 $ '{"id": "4", "name": "Car rental", "group": "Vancouver", "amount": 189, "payer": "Joe", "sharers": ["Alex", "Joe"], "created_at": "2026-06-21T00:00:00"}'
 ```
 
 ---
@@ -39,7 +39,7 @@ Retrieve the full JSON object or a specific field:
 
 ```bash
 JSON.GET expense:2
-JSON.GET expense:2 $.paid_by
+JSON.GET expense:2 $.payer
 ```
 
 ---
@@ -50,11 +50,13 @@ Before querying, create an index using **RediSearch**.
 
 ```bash
 FT.CREATE idx:expense ON JSON PREFIX 1 "expense:" SCHEMA \
-  $.expense     AS expense  NUMERIC SORTABLE \
-  $.paid_by     AS paid_by  TAG \
-  $.sharers[*]  AS sharers  TAG \
-  $.title       AS title    TEXT \
-  $.date        AS date     TAG
+  $.name        AS name        TEXT \
+  $.group       AS group       TAG \
+  $.amount      AS amount      NUMERIC SORTABLE \
+  $.payer       AS payer       TAG \
+  $.sharers[*]  AS sharers     TAG \
+  $.id          AS id          TAG \
+  $.created_at  AS created_at  TEXT
 ```
 
 ---
@@ -63,12 +65,17 @@ FT.CREATE idx:expense ON JSON PREFIX 1 "expense:" SCHEMA \
 
 ### Expenses greater than 300
 ```bash
-FT.SEARCH idx:expense '@expense:[(300 +inf]'
+FT.SEARCH idx:expense '@amount:[(300 +inf]'
 ```
 
 ### Expenses paid by Joe
 ```bash
-FT.SEARCH idx:expense '@paid_by:{Joe}'
+FT.SEARCH idx:expense '@payer:{Joe}'
+```
+
+### Expenses for a group
+```bash
+FT.SEARCH idx:expense '@group:{Calgary}'
 ```
 
 ### Expenses shared with Alex
@@ -90,9 +97,9 @@ docker stop redis-stack
 
 - **Redis Stack** includes both RedisJSON and RediSearch for JSON storage + querying.
 - You can connect this Redis Stack container to a **Flask (Tiangolo) container**.
-- Add a numeric timestamp field (`date_ts`) if you plan to run range queries on dates.
+- The app's route tests use a mocked in-memory Redis service; real Redis Stack integration tests are deferred to a separate focused pass.
+- Add a numeric timestamp field, such as `created_at_ts`, if you plan to run range queries on dates.
 
 ---
 
-**Date:** October 2025
-
+**Date:** June 2026

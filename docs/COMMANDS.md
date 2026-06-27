@@ -139,18 +139,33 @@ it returns a list of settlements where the user is either the debtor or the cred
 If you just changed the code and want to run tests, you should first rebuild the container:
 ```bash
 # Rebuild with new dependencies
-docker-compose down
-docker-compose up --build -d
+docker compose down
+docker compose up --build -d
 ```
 then run the tests using one of the following commands:
 ```bash
 # Run tests inside container
-docker exec -it chipin-app pytest
+docker exec chipin-app pytest
 
 # Or with more verbose output
-docker exec -it chipin-app pytest -v
+docker exec chipin-app pytest -v
 
 # Run specific test file
-docker exec -it chipin-app pytest tests/test_users.py
+docker exec chipin-app pytest tests/test_users.py
 ```
-**NOTE:** Redis_stack was simulated for the tests so the tests run fast without needing the real Redis container.
+
+Current focused test files:
+
+```bash
+docker exec chipin-app pytest tests/test_admin.py -v
+docker exec chipin-app pytest tests/test_expenses.py -v
+docker exec chipin-app pytest tests/test_groups.py -v
+docker exec chipin-app pytest tests/test_main.py -v
+docker exec chipin-app pytest tests/test_models.py -v
+docker exec chipin-app pytest tests/test_redis_service.py -v
+docker exec chipin-app pytest tests/test_settlement_model.py -v
+docker exec chipin-app pytest tests/test_settlements.py -v
+docker exec chipin-app pytest tests/test_users.py -v
+```
+
+**NOTE:** Most tests use a mocked in-memory Redis service so they run fast without depending on Redis data state. Real Redis Stack integration tests are intentionally deferred for a separate focused pass.

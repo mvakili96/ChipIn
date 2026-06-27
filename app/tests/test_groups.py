@@ -23,7 +23,7 @@ def test_create_group(client):
     )
 
     assert response.status_code == 201
-    data = json.loads(response.data)
+    data = response.get_json()
     assert data["name"] == "Calgary"
     assert data["users"] == ["agha vakili", "Moein"]
     assert "id" in data
@@ -52,8 +52,8 @@ def test_create_group_missing_fields(client):
     )
 
     assert response.status_code == 400
-    data = json.loads(response.data)
-    assert "error" in data
+    data = response.get_json()
+    assert data == {"error": "Invalid request: missing name or users"}
 
 
 def test_create_group_missing_users(client):
@@ -67,8 +67,7 @@ def test_create_group_missing_users(client):
     )
 
     assert response.status_code == 400
-    data = json.loads(response.data)
-    assert "error" in data
+    data = response.get_json()
     assert data["error"] == "Invalid request: missing name or users"
 
     # Create a group with users missing in data
@@ -79,8 +78,7 @@ def test_create_group_missing_users(client):
     )
 
     assert response.status_code == 400
-    data = json.loads(response.data)
-    assert "error" in data
+    data = response.get_json()
     assert data["error"] == "Invalid request: missing name or users"
 
 
@@ -101,8 +99,7 @@ def test_create_group_user_not_found(client):
     )
 
     assert response.status_code == 404
-    data = json.loads(response.data)
-    assert "error" in data
+    data = response.get_json()
     assert data["error"] == "One or more names not found"
 
 
@@ -149,17 +146,17 @@ def test_get_groups(client):
     )
     response = client.get("/groups/")
     assert response.status_code == 200
-    data = json.loads(response.data)
+    data = response.get_json()
     assert isinstance(data, list)
     assert len(data) == 2
-    assert data[0]["name"] == "Calgary"
-    assert data[0]["users"] == ["agha vakili", "Moein"]
-    assert "id" in data[0]
-    assert "created_at" in data[0]
-    assert data[1]["name"] == "Vancouver"
-    assert data[1]["users"] == ["User 1", "User 2", "User 3"]
-    assert "id" in data[1]
-    assert "created_at" in data[1]
+    groups_by_name = {group["name"]: group for group in data}
+    assert set(groups_by_name) == {"Calgary", "Vancouver"}
+    assert groups_by_name["Calgary"]["users"] == ["agha vakili", "Moein"]
+    assert "id" in groups_by_name["Calgary"]
+    assert "created_at" in groups_by_name["Calgary"]
+    assert groups_by_name["Vancouver"]["users"] == ["User 1", "User 2", "User 3"]
+    assert "id" in groups_by_name["Vancouver"]
+    assert "created_at" in groups_by_name["Vancouver"]
 
 
 def test_get_group(client):
@@ -183,12 +180,12 @@ def test_get_group(client):
         content_type="application/json",
     )
     assert response.status_code == 201
-    data = json.loads(response.data)
+    data = response.get_json()
 
     # Get the group
     response = client.get(f"/groups/{data['id']}/")
     assert response.status_code == 200
-    data = json.loads(response.data)
+    data = response.get_json()
     assert data["name"] == "Calgary"
     assert data["users"] == ["agha vakili", "Moein"]
     assert "id" in data
@@ -215,7 +212,7 @@ def test_get_group_adds_trailing_slash(client):
         content_type="application/json",
     )
     assert response.status_code == 201
-    data = json.loads(response.data)
+    data = response.get_json()
 
     response = client.get(f"/groups/{data['id']}")
 
@@ -229,8 +226,31 @@ def test_get_group_not_found(client):
     # Get the group
     response = client.get("/groups/999/")
     assert response.status_code == 404
-    data = json.loads(response.data)
-    assert "error" in data
+    data = response.get_json()
+    assert data == {"error": "Group not found"}
+
+
+def test_delete_group(client, create_group):
+    """Test deleting an existing group"""
+    group = create_group(name="Calgary", users=["agha vakili", "Moein"])
+
+    response = client.delete(f"/groups/{group['id']}/")
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data == {"message": f"Group {group['id']} deleted successfully"}
+
+    response = client.get(f"/groups/{group['id']}/")
+    assert response.status_code == 404
+
+
+def test_delete_group_not_found(client):
+    """Test deleting a group that does not exist"""
+    response = client.delete("/groups/999/")
+
+    assert response.status_code == 404
+    data = response.get_json()
+    assert data == {"error": "Group not found"}
 
 
 def test_get_group_attr(client):
@@ -254,7 +274,7 @@ def test_get_group_attr(client):
         content_type="application/json",
     )
     assert response.status_code == 201
-    data = json.loads(response.data)
+    data = response.get_json()
 
     # Get the group's attributes
     for k in ["name", "users"]:
