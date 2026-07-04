@@ -1,0 +1,35 @@
+name: ChipIn CI
+
+on:
+  push:
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      TELEGRAM_BOT_TOKEN: "123456:replace-with-botfather-token"
+      TELEGRAM_WEBHOOK_SECRET: "replace-with-random-secret"
+      TELEGRAM_BOT_USERNAME: "replace_with_bot_username_without_at"
+      PUBLIC_BASE_URL: "https://replace-with-your-public-https-url"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          cd app
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          cd app
+          pytest -q
