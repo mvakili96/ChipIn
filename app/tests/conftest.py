@@ -246,6 +246,12 @@ class MockRedisService:
         expense = self.get_expense(expense_id)
         return expense.get(key) if expense else None
 
+    def delete_expense_record(self, expense_id):
+        key = f"expense:{expense_id}"
+        existed = key in self.data
+        self.data.pop(key, None)
+        return existed and key not in self.data.keys()
+
     def delete_expense(self, expense_id):
         key = f"expense:{expense_id}"
         expense = self.data.get(key)
