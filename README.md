@@ -1,5 +1,7 @@
 # ChipIn
 
+[![ChipIn CI](https://github.com/mvakili96/ChipIn/actions/workflows/ci.yml/badge.svg)](https://github.com/mvakili96/ChipIn/actions/workflows/ci.yml)
+
 ChipIn is a containerized Flask + Redis Stack backend for shared expense tracking and settlement calculation.
 
 The project is structured as a small Splitwise-style API: users can be created, grouped together, linked to expenses, and used to derive settlements based on who paid and who shared each expense.
@@ -71,6 +73,15 @@ The API currently supports:
 - Docker Compose
 - pytest
 
+## Continuous Integration
+
+GitHub Actions runs the workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every push and on pull requests targeting `main`. It contains two jobs:
+
+- `test`: installs the Python dependencies and runs the pytest suite with the mocked in-memory Redis service
+- `integration`: validates the Docker Compose configuration, builds and starts the application stack, and exercises the core user, group, expense, lookup, settlement, and deletion flow against a real Redis Stack instance
+
+When both jobs are configured as required status checks in the `main` branch ruleset, GitHub blocks merging until they pass.
+
 ## Getting Started
 
 The fastest way to run the project locally is through Docker Compose:
@@ -136,6 +147,9 @@ This is the main shape of the repo:
 
 ```text
 .
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── app/
 │   ├── main.py
 │   ├── models/
@@ -157,6 +171,7 @@ Key areas:
 - [app/static/admin/](app/static/admin): admin panel served at `/admin/`
 - [app/static/telegram/](app/static/telegram): Telegram Mini App client served at `/telegram/`
 - [app/tests/](app/tests): route-level tests with a mocked Redis service
+- [.github/workflows/ci.yml](.github/workflows/ci.yml): unit and real Redis Stack integration CI
 
 ## Where To Look First
 

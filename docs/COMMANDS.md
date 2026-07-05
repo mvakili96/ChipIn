@@ -165,7 +165,17 @@ docker exec chipin-app pytest tests/test_models.py -v
 docker exec chipin-app pytest tests/test_redis_service.py -v
 docker exec chipin-app pytest tests/test_settlement_model.py -v
 docker exec chipin-app pytest tests/test_settlements.py -v
+docker exec chipin-app pytest tests/test_telegram.py -v
 docker exec chipin-app pytest tests/test_users.py -v
 ```
 
-**NOTE:** Most tests use a mocked in-memory Redis service so they run fast without depending on Redis data state. Real Redis Stack integration tests are intentionally deferred for a separate focused pass.
+Most pytest tests use a mocked in-memory Redis service so they run quickly without depending on Redis state.
+
+## Continuous Integration
+
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs on every push and on pull requests targeting `main`. It has two jobs:
+
+- `test`: runs the pytest suite with mocked Redis
+- `integration`: builds the Docker Compose stack and tests the core API workflow against real Redis Stack, including users, groups, expenses, RediSearch lookups, settlements, and deletion
+
+The integration job always stops the containers and removes their volumes when it finishes.

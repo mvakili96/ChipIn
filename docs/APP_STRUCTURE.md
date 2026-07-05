@@ -4,6 +4,9 @@ This document reflects the current layout of the ChipIn repo.
 
 ```bash
 chipin/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 ├── docker-compose.yml
 ├── Dockerfile
 ├── app/
@@ -55,6 +58,9 @@ chipin/
 ```
 
 ## What Each Part Does
+
+- `.github/workflows/ci.yml`:
+  Runs the GitHub Actions CI workflow on pushes and pull requests targeting `main`. Its `test` job runs pytest with mocked Redis, while its `integration` job builds the Docker Compose stack and exercises the core API flow against real Redis Stack.
 
 - `docker-compose.yml`:
   Runs the Flask app container and the Redis Stack container together.

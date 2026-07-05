@@ -97,7 +97,7 @@ docker stop redis-stack
 
 - **Redis Stack** includes both RedisJSON and RediSearch for JSON storage + querying.
 - You can connect this Redis Stack container to a **Flask (Tiangolo) container**.
-- The app's route tests use a mocked in-memory Redis service; real Redis Stack integration tests are deferred to a separate focused pass.
+- The pytest route tests use a mocked in-memory Redis service for speed. The GitHub Actions `integration` job builds the Docker Compose stack and exercises the core API workflow against a real Redis Stack instance.
 - Add a numeric timestamp field, such as `created_at_ts`, if you plan to run range queries on dates.
 
 ---
