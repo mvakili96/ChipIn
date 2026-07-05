@@ -1,0 +1,162 @@
+name: ChipIn CI
+
+on:
+  push:
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      TELEGRAM_BOT_TOKEN: "123456:replace-with-botfather-token"
+      TELEGRAM_WEBHOOK_SECRET: "replace-with-random-secret"
+      TELEGRAM_BOT_USERNAME: "replace_with_bot_username_without_at"
+      PUBLIC_BASE_URL: "https://replace-with-your-public-https-url"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          cd app
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          cd app
+          pytest -q
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose configuration
+        run: docker compose config --quiet
+
+      - name: Start Redis Stack
+        run: |
+          docker compose up --detach redis
+
+          for attempt in {1..30}; do
+            if docker compose exec --no-TTY redis \
+              redis-cli --no-auth-warning -a mypassword ping | grep --quiet PONG; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker compose ps
+          docker compose logs
+          exit 1
+
+      - name: Build and start Flask application
+        run: docker compose up --build --detach app
+
+      - name: Wait for Flask and verify Redis connectivity
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost/test-redis/ \
+              | jq --exit-status '.success == true' > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker compose ps
+          docker compose logs
+          exit 1
+
+      - name: Test core API workflow against Redis Stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_url="http://localhost"
+
+          curl --fail --silent "$base_url/" \
+            | jq --exit-status '.status == "running"' > /dev/null
+          curl --fail --silent "$base_url/admin/" > /dev/null
+          curl --fail --silent "$base_url/telegram/" > /dev/null
+
+          alice=$(
+            curl --fail-with-body --silent \
+              --request POST "$base_url/users/" \
+              --header "Content-Type: application/json" \
+              --data '{"name":"Alice","email":"alice@example.com"}'
+          )
+          bob=$(
+            curl --fail-with-body --silent \
+              --request POST "$base_url/users/" \
+              --header "Content-Type: application/json" \
+              --data '{"name":"Bob","email":"bob@example.com"}'
+          )
+          alice_id=$(jq --exit-status --raw-output '.id' <<< "$alice")
+          bob_id=$(jq --exit-status --raw-output '.id' <<< "$bob")
+
+          group=$(
+            curl --fail-with-body --silent \
+              --request POST "$base_url/groups/" \
+              --header "Content-Type: application/json" \
+              --data '{"name":"CI Group","users":["Alice","Bob"]}'
+          )
+          group_id=$(jq --exit-status --raw-output '.id' <<< "$group")
+
+          expense=$(
+            curl --fail-with-body --silent \
+              --request POST "$base_url/expenses/" \
+              --header "Content-Type: application/json" \
+              --data '{"name":"Dinner","group":"CI Group","amount":30,"payer":"Alice","sharers":["Alice","Bob"]}'
+          )
+          expense_id=$(
+            jq --exit-status --raw-output '.saved_expense.id' <<< "$expense"
+          )
+          jq --exit-status \
+            '.group_settlement == [[1, 0, 15]]' <<< "$expense" > /dev/null
+
+          curl --fail --silent "$base_url/users/$alice_id/" \
+            | jq --exit-status '.name == "Alice"' > /dev/null
+          curl --fail --silent "$base_url/users/$bob_id/" \
+            | jq --exit-status '.name == "Bob"' > /dev/null
+          curl --fail --silent "$base_url/groups/$group_id/" \
+            | jq --exit-status \
+                '.name == "CI Group" and .users == ["Alice", "Bob"]' > /dev/null
+          curl --fail --silent "$base_url/expenses/$expense_id/" \
+            | jq --exit-status \
+                '.name == "Dinner" and .amount == 30' > /dev/null
+          curl --fail --silent "$base_url/expenses/group/$group_id/" \
+            | jq --exit-status \
+                'length == 1 and .[0].name == "Dinner"' > /dev/null
+          curl --fail --silent "$base_url/expenses/user/paid/$alice_id/" \
+            | jq --exit-status \
+                'length == 1 and .[0].payer == "Alice"' > /dev/null
+          curl --fail --silent "$base_url/settlements/group/$group_id/" \
+            | jq --exit-status \
+                '.settlements_this_group == [["Bob", "Alice", 15]]' > /dev/null
+          curl --fail --silent "$base_url/settlements/user/$bob_id/" \
+            | jq --exit-status \
+                '.settlements_this_user == [["Bob", "Alice", 15]]' > /dev/null
+
+          curl --fail-with-body --silent \
+            --request DELETE "$base_url/expenses/$expense_id/" > /dev/null
+          curl --fail-with-body --silent \
+            --request DELETE "$base_url/groups/$group_id/" > /dev/null
+
+          test "$(
+            curl --silent --output /dev/null --write-out '%{http_code}' \
+              "$base_url/groups/$group_id/"
+          )" = "404"
+
+      - name: Stop application stack
+        if: always()
+        run: docker compose down --volumes

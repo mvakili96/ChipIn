@@ -235,6 +235,7 @@ def test_get_group_expenses(client, create_group):
             "id": data[0]["id"],
             "name": "Dinner",
             "group": "Calgary",
+            "group_id": None,
             "amount": 30,
             "payer": "Alice",
             "sharers": ["Alice", "Bob"],

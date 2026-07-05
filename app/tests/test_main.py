@@ -6,9 +6,11 @@ def test_home_api_metadata(client):
     assert data["message"] == "ChipIn API"
     assert data["status"] == "running"
     assert data["endpoints"] == {
-        "users": "/users",
-        "groups": "/groups",
-        "expenses": "/expenses",
-        "settlements": "/settlements",
+        "users": "/users/",
+        "groups": "/groups/",
+        "expenses": "/expenses/",
+        "settlements": "/settlements/",
         "admin": "/admin/",
+        "telegram_client": "/telegram/",
+        "telegram_webhook": "/telegram/webhook/",
     }
