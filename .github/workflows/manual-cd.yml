@@ -1,0 +1,64 @@
+name: Manual CD
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: manual-cd
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy app on server
+    runs-on: self-hosted
+    timeout-minutes: 15
+
+    env:
+      SERVER_APP_DIR: ${{ vars.SERVER_APP_DIR }}
+
+    steps:
+      - name: Deploy latest main
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SERVER_APP_DIR:-}" ]; then
+            echo "SERVER_APP_DIR repository variable is not set."
+            echo "Set it to the absolute path of the ChipIn repo on the deployment server."
+            exit 1
+          fi
+
+          cd "$SERVER_APP_DIR"
+
+          git fetch origin
+          git checkout main
+          git pull --ff-only origin main
+
+          docker compose build app
+          docker compose up -d --no-deps app
+
+      - name: Verify app health
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd "$SERVER_APP_DIR"
+
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://localhost/ \
+              | grep --quiet '"status"[[:space:]]*:[[:space:]]*"running"'; then
+              echo "Manual CD health check passed."
+              exit 0
+            fi
+
+            echo "Waiting for app health check... attempt $attempt/30"
+            sleep 2
+          done
+
+          echo "Manual CD health check failed."
+          docker compose ps
+          docker compose logs --tail=200 app
+          exit 1
