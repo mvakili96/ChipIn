@@ -2,6 +2,7 @@
 redis-data/
 __pycache__/
 .DS_Store
+actions-runner/
 
 # Local secrets/config
 .env
