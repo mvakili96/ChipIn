@@ -158,6 +158,7 @@ Current focused test files:
 
 ```bash
 docker exec chipin-app pytest tests/test_admin.py -v
+docker exec chipin-app pytest tests/test_api_contracts.py -v
 docker exec chipin-app pytest tests/test_expenses.py -v
 docker exec chipin-app pytest tests/test_groups.py -v
 docker exec chipin-app pytest tests/test_main.py -v
@@ -169,7 +170,7 @@ docker exec chipin-app pytest tests/test_telegram.py -v
 docker exec chipin-app pytest tests/test_users.py -v
 ```
 
-Most pytest tests use a mocked in-memory Redis service so they run quickly without depending on Redis state.
+Most pytest tests use a mocked in-memory Redis service so they run quickly without depending on Redis state. The API contract tests focus on keeping public JSON response shapes stable for API clients such as the admin panel and Telegram Mini App.
 
 ## Continuous Integration
 

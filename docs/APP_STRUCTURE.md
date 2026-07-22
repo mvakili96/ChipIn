@@ -6,7 +6,8 @@ This document reflects the current layout of the ChipIn repo.
 chipin/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml
+│       ├── ci.yml
+│       └── manual-cd.yml
 ├── docker-compose.yml
 ├── Dockerfile
 ├── app/
@@ -41,6 +42,7 @@ chipin/
 │   │       └── styles.css
 │   └── tests/
 │       ├── conftest.py
+│       ├── test_api_contracts.py
 │       ├── test_telegram.py
 │       ├── test_admin.py
 │       ├── test_expenses.py
@@ -61,6 +63,9 @@ chipin/
 
 - `.github/workflows/ci.yml`:
   Runs the GitHub Actions CI workflow on pushes and pull requests targeting `main`. Its `test` job runs pytest with mocked Redis, while its `integration` job builds the Docker Compose stack and exercises the core API flow against real Redis Stack.
+
+- `.github/workflows/manual-cd.yml`:
+  Runs the manual deployment workflow on a self-hosted GitHub Actions runner. It updates the server checkout to the latest `main`, rebuilds and restarts only the `app` service, and leaves Redis and ngrok untouched.
 
 - `docker-compose.yml`:
   Runs the Flask app container and the Redis Stack container together.
@@ -104,6 +109,7 @@ chipin/
 - `app/tests/`:
   Pytest-based route, unit, and static smoke tests. Route tests use a mocked in-memory Redis service so they run quickly without depending on Redis state.
   - `conftest.py`: shared Flask app/client fixtures, helpers, and mock Redis service
+  - `test_api_contracts.py`: API response shape, type, and error contract tests
   - `test_admin.py`: admin panel and static asset smoke tests
   - `test_users.py`: user route tests
   - `test_groups.py`: group route tests
