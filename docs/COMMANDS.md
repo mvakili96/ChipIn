@@ -172,11 +172,48 @@ docker exec chipin-app pytest tests/test_users.py -v
 
 Most pytest tests use a mocked in-memory Redis service so they run quickly without depending on Redis state. The API contract tests focus on keeping public JSON response shapes stable for API clients such as the admin panel and Telegram Mini App.
 
+### Run browser end-to-end tests locally
+
+The Playwright suite drives Chromium through the admin panel and Telegram Mini App. Run it against a local Docker Compose stack, not against the deployment server or data you need to preserve.
+
+```bash
+# From the repository root, create an isolated Python environment
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r e2e/requirements.txt
+python -m playwright install chromium
+
+# Use the same dummy Telegram token in the app and the test process
+export TELEGRAM_BOT_TOKEN="123456:e2e-test-token"
+docker compose \
+  -p chipin-e2e \
+  -f docker-compose.yml \
+  -f docker-compose.e2e.yml \
+  up --build -d
+
+# Run Chromium headlessly and retain diagnostics for failures
+cd e2e
+E2E_BASE_URL=http://localhost:18080 python -m pytest --output=test-results
+```
+
+If Chromium reports missing Linux libraries, install them with `python -m playwright install --with-deps chromium`. The E2E Compose override uses ports `18080`, `16379`, and `18001`, plus a separate disposable Redis volume, so the regular ChipIn containers and data remain untouched.
+
+Stop and remove the E2E containers and their disposable Redis volume afterward from the repository root:
+
+```bash
+docker compose \
+  -p chipin-e2e \
+  -f docker-compose.yml \
+  -f docker-compose.e2e.yml \
+  down --volumes
+```
+
 ## Continuous Integration
 
-The GitHub Actions workflow in `.github/workflows/ci.yml` runs on every push and on pull requests targeting `main`. It has two jobs:
+The GitHub Actions workflow in `.github/workflows/ci.yml` runs on every push and on pull requests targeting `main`. It has three jobs:
 
 - `test`: runs the pytest suite with mocked Redis
 - `integration`: builds the Docker Compose stack and tests the core API workflow against real Redis Stack, including users, groups, expenses, RediSearch lookups, settlements, and deletion
+- `e2e`: starts Docker Compose and runs Playwright in Chromium against the admin and authenticated Telegram user interfaces
 
-The integration job always stops the containers and removes their volumes when it finishes.
+The integration and E2E jobs always stop their containers and remove their volumes when they finish. When an E2E test fails, GitHub Actions also uploads its Playwright trace and screenshot for diagnosis.

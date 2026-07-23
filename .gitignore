@@ -1,8 +1,11 @@
 # Dir
 redis-data/
 __pycache__/
+.pytest_cache/
 .DS_Store
 actions-runner/
+e2e/test-results/
+.venv/
 
 # Local secrets/config
 .env
