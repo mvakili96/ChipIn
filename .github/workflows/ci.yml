@@ -84,10 +84,44 @@ jobs:
           set -euo pipefail
           base_url="http://localhost"
 
+          assert_status() {
+            local expected_status="$1"
+            local method="$2"
+            local path="$3"
+            local body="${4:-}"
+            local actual_status
+
+            if [ -n "$body" ]; then
+              actual_status=$(
+                curl --silent --output /dev/null --write-out '%{http_code}' \
+                  --request "$method" "$base_url$path" \
+                  --header "Content-Type: application/json" \
+                  --data "$body"
+              )
+            else
+              actual_status=$(
+                curl --silent --output /dev/null --write-out '%{http_code}' \
+                  --request "$method" "$base_url$path"
+              )
+            fi
+
+            test "$actual_status" = "$expected_status"
+          }
+
           curl --fail --silent "$base_url/" \
             | jq --exit-status '.status == "running"' > /dev/null
           curl --fail --silent "$base_url/admin/" > /dev/null
           curl --fail --silent "$base_url/telegram/" > /dev/null
+          curl --fail --silent "$base_url/users/" \
+            | jq --exit-status 'type == "array" and length == 0' > /dev/null
+          curl --fail --silent "$base_url/groups/" \
+            | jq --exit-status 'type == "array" and length == 0' > /dev/null
+          curl --fail --silent "$base_url/expenses/" \
+            | jq --exit-status 'type == "array" and length == 0' > /dev/null
+          assert_status 400 POST /users/ '{"name":"Missing Email"}'
+          assert_status 404 GET /users/not-found/
+          assert_status 404 POST /groups/ \
+            '{"name":"Invalid Group","users":["Unknown"]}'
 
           alice=$(
             curl --fail-with-body --silent \
@@ -104,6 +138,15 @@ jobs:
           alice_id=$(jq --exit-status --raw-output '.id' <<< "$alice")
           bob_id=$(jq --exit-status --raw-output '.id' <<< "$bob")
 
+          curl --fail --silent "$base_url/users/" \
+            | jq --exit-status \
+                'length == 2 and any(.[]; .name == "Alice") and any(.[]; .name == "Bob")' > /dev/null
+          curl --fail --silent "$base_url/users/user-names/" \
+            | jq --exit-status \
+                'length == 2 and index("Alice") and index("Bob")' > /dev/null
+          curl --fail --silent "$base_url/users/$alice_id/name/" \
+            | jq --exit-status '. == "Alice"' > /dev/null
+
           group=$(
             curl --fail-with-body --silent \
               --request POST "$base_url/groups/" \
@@ -111,6 +154,20 @@ jobs:
               --data '{"name":"CI Group","users":["Alice","Bob"]}'
           )
           group_id=$(jq --exit-status --raw-output '.id' <<< "$group")
+
+          curl --fail --silent "$base_url/groups/" \
+            | jq --exit-status \
+                'length == 1 and .[0].name == "CI Group"' > /dev/null
+          curl --fail --silent "$base_url/groups/$group_id/name/" \
+            | jq --exit-status '. == "CI Group"' > /dev/null
+          assert_status 400 POST /expenses/ \
+            '{"name":"Missing Payer","group":"CI Group","amount":30}'
+          assert_status 404 POST /expenses/ \
+            '{"name":"Bad Group","group":"Unknown","amount":30,"payer":"Alice"}'
+          assert_status 404 POST /expenses/ \
+            '{"name":"Bad Payer","group":"CI Group","amount":30,"payer":"Charlie"}'
+          assert_status 404 POST /expenses/ \
+            '{"name":"Bad Sharer","group":"CI Group","amount":30,"payer":"Alice","sharers":["Alice","Charlie"]}'
 
           expense=$(
             curl --fail-with-body --silent \
@@ -124,6 +181,19 @@ jobs:
           jq --exit-status \
             '.group_settlement == [[1, 0, 15]]' <<< "$expense" > /dev/null
 
+          snacks=$(
+            curl --fail-with-body --silent \
+              --request POST "$base_url/expenses/" \
+              --header "Content-Type: application/json" \
+              --data '{"name":"Snacks","group":"CI Group","amount":10,"payer":"Bob"}'
+          )
+          snacks_id=$(
+            jq --exit-status --raw-output '.saved_expense.id' <<< "$snacks"
+          )
+          jq --exit-status \
+            '.saved_expense.sharers == ["Alice", "Bob"] and .group_settlement == [[1, 0, 10]]' \
+            <<< "$snacks" > /dev/null
+
           curl --fail --silent "$base_url/users/$alice_id/" \
             | jq --exit-status '.name == "Alice"' > /dev/null
           curl --fail --silent "$base_url/users/$bob_id/" \
@@ -134,21 +204,49 @@ jobs:
           curl --fail --silent "$base_url/expenses/$expense_id/" \
             | jq --exit-status \
                 '.name == "Dinner" and .amount == 30' > /dev/null
+          curl --fail --silent "$base_url/expenses/$expense_id/payer/" \
+            | jq --exit-status '. == "Alice"' > /dev/null
+          curl --fail --silent "$base_url/expenses/" \
+            | jq --exit-status \
+                'length == 2 and any(.[]; .name == "Dinner") and any(.[]; .name == "Snacks")' > /dev/null
           curl --fail --silent "$base_url/expenses/group/$group_id/" \
             | jq --exit-status \
-                'length == 1 and .[0].name == "Dinner"' > /dev/null
+                'length == 2 and any(.[]; .name == "Dinner") and any(.[]; .name == "Snacks")' > /dev/null
           curl --fail --silent "$base_url/expenses/user/paid/$alice_id/" \
             | jq --exit-status \
                 'length == 1 and .[0].payer == "Alice"' > /dev/null
+          curl --fail --silent "$base_url/expenses/user/paid/$bob_id/" \
+            | jq --exit-status \
+                'length == 1 and .[0].payer == "Bob"' > /dev/null
+          curl --fail --silent "$base_url/settlements/group/" \
+            | jq --exit-status \
+                'to_entries | length == 1 and .[0].value == [["Bob", "Alice", 10]]' > /dev/null
           curl --fail --silent "$base_url/settlements/group/$group_id/" \
             | jq --exit-status \
-                '.settlements_this_group == [["Bob", "Alice", 15]]' > /dev/null
+                '.settlements_this_group == [["Bob", "Alice", 10]]' > /dev/null
           curl --fail --silent "$base_url/settlements/user/$bob_id/" \
             | jq --exit-status \
-                '.settlements_this_user == [["Bob", "Alice", 15]]' > /dev/null
+                '.settlements_this_user == [["Bob", "Alice", 10]]' > /dev/null
+          assert_status 404 GET /expenses/not-found/
+          assert_status 404 GET /expenses/group/not-found/
+          assert_status 404 GET /expenses/user/paid/not-found/
+          assert_status 404 GET /settlements/group/not-found/
+          assert_status 404 GET /settlements/user/not-found/
+          assert_status 404 DELETE /expenses/not-found/
 
           curl --fail-with-body --silent \
             --request DELETE "$base_url/expenses/$expense_id/" > /dev/null
+          test "$(
+            curl --silent --output /dev/null --write-out '%{http_code}' \
+              "$base_url/expenses/$expense_id/"
+          )" = "404"
+          curl --fail --silent "$base_url/expenses/group/$group_id/" \
+            | jq --exit-status \
+                'length == 1 and .[0].name == "Snacks"' > /dev/null
+          curl --fail --silent "$base_url/settlements/group/$group_id/" \
+            | jq --exit-status \
+                '.settlements_this_group == [["Alice", "Bob", 5]]' > /dev/null
+
           curl --fail-with-body --silent \
             --request DELETE "$base_url/groups/$group_id/" > /dev/null
 
@@ -156,6 +254,97 @@ jobs:
             curl --silent --output /dev/null --write-out '%{http_code}' \
               "$base_url/groups/$group_id/"
           )" = "404"
+          test "$(
+            curl --silent --output /dev/null --write-out '%{http_code}' \
+              "$base_url/expenses/$snacks_id/"
+          )" = "404"
+
+      - name: Stop application stack
+        if: always()
+        run: docker compose down --volumes
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      TELEGRAM_BOT_TOKEN: "123456:e2e-test-token"
+      TELEGRAM_WEBHOOK_SECRET: "e2e-webhook-secret"
+      TELEGRAM_BOT_USERNAME: "e2e_test_bot"
+      PUBLIC_BASE_URL: "https://example.com"
+      E2E_BASE_URL: "http://localhost:18080"
+      COMPOSE_FILE: "docker-compose.yml:docker-compose.e2e.yml"
+      COMPOSE_PROJECT_NAME: "chipin-e2e"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Validate E2E Docker Compose configuration
+        run: docker compose config --quiet
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install end-to-end test dependencies
+        run: |
+          python -m pip install -r e2e/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Start Redis Stack
+        run: |
+          docker compose up --detach redis
+
+          for attempt in {1..30}; do
+            if docker compose exec --no-TTY redis \
+              redis-cli --no-auth-warning -a mypassword ping | grep --quiet PONG; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker compose ps
+          docker compose logs redis
+          exit 1
+
+      - name: Build and start Flask application
+        run: docker compose up --build --detach app
+
+      - name: Wait for application
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:18080/test-redis/ \
+              | jq --exit-status '.success == true' > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker compose ps
+          docker compose logs app
+          exit 1
+
+      - name: Run browser end-to-end tests
+        run: |
+          cd e2e
+          python -m pytest --output=test-results
+
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Show Docker logs on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --tail=200 app redis
 
       - name: Stop application stack
         if: always()

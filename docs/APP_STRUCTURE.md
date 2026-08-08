@@ -6,9 +6,17 @@ This document reflects the current layout of the ChipIn repo.
 chipin/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml
+│       ├── ci.yml
+│       └── manual-cd.yml
 ├── docker-compose.yml
+├── docker-compose.e2e.yml
 ├── Dockerfile
+├── e2e/
+│   ├── conftest.py
+│   ├── pytest.ini
+│   ├── requirements.txt
+│   ├── test_admin.py
+│   └── test_telegram.py
 ├── app/
 │   ├── main.py
 │   ├── pytest.ini
@@ -41,6 +49,7 @@ chipin/
 │   │       └── styles.css
 │   └── tests/
 │       ├── conftest.py
+│       ├── test_api_contracts.py
 │       ├── test_telegram.py
 │       ├── test_admin.py
 │       ├── test_expenses.py
@@ -60,10 +69,16 @@ chipin/
 ## What Each Part Does
 
 - `.github/workflows/ci.yml`:
-  Runs the GitHub Actions CI workflow on pushes and pull requests targeting `main`. Its `test` job runs pytest with mocked Redis, while its `integration` job builds the Docker Compose stack and exercises the core API flow against real Redis Stack.
+  Runs the GitHub Actions CI workflow on pushes and pull requests targeting `main`. Its `test` job runs pytest with mocked Redis, its `integration` job exercises the core API flow against real Redis Stack, and its `e2e` job drives the admin and Telegram interfaces in Chromium with Playwright.
+
+- `.github/workflows/manual-cd.yml`:
+  Runs the manual deployment workflow on a self-hosted GitHub Actions runner. It updates the server checkout to the latest `main`, rebuilds and restarts only the `app` service, and leaves Redis and ngrok untouched.
 
 - `docker-compose.yml`:
   Runs the Flask app container and the Redis Stack container together.
+
+- `docker-compose.e2e.yml`:
+  Overrides the regular Compose container names, host ports, and Redis storage so browser tests can run beside the normal local stack without touching its data.
 
 - `Dockerfile`:
   Builds the application image and installs Python dependencies.
@@ -104,6 +119,7 @@ chipin/
 - `app/tests/`:
   Pytest-based route, unit, and static smoke tests. Route tests use a mocked in-memory Redis service so they run quickly without depending on Redis state.
   - `conftest.py`: shared Flask app/client fixtures, helpers, and mock Redis service
+  - `test_api_contracts.py`: API response shape, type, and error contract tests
   - `test_admin.py`: admin panel and static asset smoke tests
   - `test_users.py`: user route tests
   - `test_groups.py`: group route tests
@@ -114,6 +130,14 @@ chipin/
   - `test_redis_service.py`: focused Redis service helper unit tests
   - `test_settlement_model.py`: settlement calculation unit tests
   - `test_settlements.py`: settlement route tests
+
+- `e2e/`:
+  Browser-level pytest suite powered by Playwright. It starts from the public web interfaces and verifies the JavaScript UI, HTTP API, Flask container, and Redis Stack together.
+  - `conftest.py`: shared application URL and browser-error checks
+  - `test_admin.py`: user, group, expense, settlement, and deletion flow through the admin panel
+  - `test_telegram.py`: signed Telegram Mini App authentication plus expense create, edit, and delete flow
+  - `requirements.txt`: dependencies used only by the E2E test runner
+  - `pytest.ini`: Chromium, trace, screenshot, and pytest settings for the browser suite
 
 - `app/requirements.txt`:
   Python dependencies for the app and tests.

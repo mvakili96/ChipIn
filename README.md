@@ -72,15 +72,65 @@ The API currently supports:
 - Redis Stack
 - Docker Compose
 - pytest
+- Playwright
 
 ## Continuous Integration
 
-GitHub Actions runs the workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every push and on pull requests targeting `main`. It contains two jobs:
+GitHub Actions runs the workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every push and on pull requests targeting `main`. It contains three jobs:
 
 - `test`: installs the Python dependencies and runs the pytest suite with the mocked in-memory Redis service
 - `integration`: validates the Docker Compose configuration, builds and starts the application stack, and exercises the core user, group, expense, lookup, settlement, and deletion flow against a real Redis Stack instance
+- `e2e`: starts a fresh Docker Compose stack and uses Playwright with Chromium to exercise the admin panel and an authenticated Telegram Mini App expense lifecycle through the real browser UI
 
-When both jobs are configured as required status checks in the `main` branch ruleset, GitHub blocks merging until they pass.
+When all three jobs are configured as required status checks in the `main` branch ruleset, GitHub blocks merging until they pass. Failed browser tests upload Playwright traces and screenshots as a short-lived GitHub Actions artifact.
+
+## Manual CD
+
+Manual deployment is handled by [`.github/workflows/manual-cd.yml`](.github/workflows/manual-cd.yml). This workflow is intentionally not automatic: it only runs when someone clicks **Run workflow** in GitHub Actions.
+
+The deployment job uses a GitHub self-hosted runner installed on the deployment server. This avoids exposing SSH and lets the deployment commands run locally on the same machine that already runs Docker Compose, Redis Stack, the Flask app, and ngrok.
+
+### One-time server setup
+
+On GitHub, open the repository and go to **Settings → Actions → Runners → New self-hosted runner**. Choose the server's operating system and follow GitHub's generated setup commands on the server.
+
+After registering the runner:
+
+- keep the runner running on the server, ideally as a service
+- make sure the runner user can run `git`, `docker`, and `docker compose`
+- make sure the runner user has Docker permission, for example by being in the `docker` group on Linux
+- make sure the ChipIn repo already exists on the server
+
+Set this repository variable under **Settings → Secrets and variables → Actions → Variables**:
+
+```text
+SERVER_APP_DIR=/absolute/path/to/ChipIn/on/the/server
+```
+
+This is a repository variable, not a secret. Do not put real hostnames, tokens, private keys, or bot secrets in the repo.
+
+### Running a manual deployment
+
+To deploy the latest `main` branch to the server:
+
+1. Open **Actions** in GitHub.
+2. Select **Manual CD**.
+3. Click **Run workflow**.
+
+The workflow runs on the server and executes:
+
+```bash
+cd "$SERVER_APP_DIR"
+git fetch origin
+git checkout main
+git pull --ff-only origin main
+docker compose build app
+docker compose up -d --no-deps app
+```
+
+Only the `app` service is rebuilt and restarted. Redis is not restarted unless you do it manually, and ngrok is not touched.
+
+After deployment, the workflow checks `http://localhost/` and expects the API to report `"status": "running"`. If the health check fails, GitHub Actions prints the app container status and recent app logs before failing the deployment.
 
 ## Getting Started
 
@@ -149,7 +199,8 @@ This is the main shape of the repo:
 .
 ├── .github/
 │   └── workflows/
-│       └── ci.yml
+│       ├── ci.yml
+│       └── manual-cd.yml
 ├── app/
 │   ├── main.py
 │   ├── models/
@@ -157,8 +208,15 @@ This is the main shape of the repo:
 │   ├── services/
 │   ├── static/
 │   └── tests/
+├── e2e/
+│   ├── conftest.py
+│   ├── pytest.ini
+│   ├── requirements.txt
+│   ├── test_admin.py
+│   └── test_telegram.py
 ├── docs/
 ├── Dockerfile
+├── docker-compose.e2e.yml
 └── docker-compose.yml
 ```
 
@@ -171,7 +229,10 @@ Key areas:
 - [app/static/admin/](app/static/admin): admin panel served at `/admin/`
 - [app/static/telegram/](app/static/telegram): Telegram Mini App client served at `/telegram/`
 - [app/tests/](app/tests): route-level tests with a mocked Redis service
+- [e2e/](e2e): Playwright browser tests for the admin panel and Telegram Mini App against the running Compose stack
+- [docker-compose.e2e.yml](docker-compose.e2e.yml): isolated containers, ports, and disposable Redis storage for browser tests
 - [.github/workflows/ci.yml](.github/workflows/ci.yml): unit and real Redis Stack integration CI
+- [.github/workflows/manual-cd.yml](.github/workflows/manual-cd.yml): manual deployment through a self-hosted GitHub Actions runner
 
 ## Where To Look First
 
@@ -188,7 +249,7 @@ If you are visiting the repository for the first time:
 - The Docker setup defines separate `app` and `redis` services in [docker-compose.yml](docker-compose.yml).
 - The admin panel is served by Flask at `/admin/` and calls the existing JSON routes directly.
 - The Telegram Mini App is served by Flask at `/telegram/` and uses Telegram `initData` for user authentication.
-- Tests are written with pytest and use a mocked in-memory Redis service instead of requiring a real Redis instance for test execution.
+- The fast pytest suite uses a mocked in-memory Redis service; the integration and Playwright E2E jobs exercise a real Redis Stack instance through Docker Compose.
 - Some detailed Redis CLI examples in [docs/GET_STARTED_REDIS-STACK.md](docs/GET_STARTED_REDIS-STACK.md) describe the underlying data ideas, but the application code is the source of truth for the current API field names and route behavior.
 
 ## Documentation
